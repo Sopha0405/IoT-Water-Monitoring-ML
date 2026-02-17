@@ -11,6 +11,9 @@ influxdb/data/
 influxdb/config/
 frontend/node_modules/
 node_modules/
+postgres/data/
+influxdb/data/
+mosquitto/data/
 
 # OS / IDE
 .vscode/
