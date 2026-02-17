@@ -1,0 +1,104 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - "./mosquitto/config:/mosquitto/config"
+      - "./mosquitto/data:/mosquitto/data"
+      - "./mosquitto/log:/mosquitto/log"
+    restart: unless-stopped
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - "./influxdb/data:/var/lib/influxdb2"
+      - "./influxdb/config:/etc/influxdb2"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: "setup"
+      DOCKER_INFLUXDB_INIT_USERNAME: "Sofia"
+      DOCKER_INFLUXDB_INIT_PASSWORD: "Sofia0405"
+      DOCKER_INFLUXDB_INIT_ORG: "water-monitoring"
+      DOCKER_INFLUXDB_INIT_BUCKET: "water-data"
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: "water_super_token_change_me"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_DB: water_app
+      POSTGRES_USER: Sofia
+      POSTGRES_PASSWORD: Sofia0405
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    container_name: water-backend
+    ports:
+      - "8000:8000"
+    environment:
+      MQTT_HOST: "mosquitto"
+      MQTT_PORT: "1883"
+      INFLUX_URL: "http://influxdb:8086"
+      INFLUX_ORG: "water-monitoring"
+      INFLUX_BUCKET: "water-data"
+      INFLUX_TOKEN: "water_super_token_change_me"
+      JWT_SECRET_KEY: "super_secret_change_me"
+      DATABASE_URL: "postgresql+psycopg://Sofia:Sofia0405@postgres:5432/water_app"
+    depends_on:
+      - mosquitto
+      - influxdb
+      - postgres
+    restart: unless-stopped
+
+  water-ingestor:
+    build:
+      context: ./backend
+    container_name: water-ingestor
+    depends_on:
+      - mosquitto
+      - influxdb
+    environment:
+      MQTT_HOST: "mosquitto"
+      MQTT_PORT: "1883"
+      MQTT_TOPIC_FILTER: "water/flow/+/+/telemetry"
+      MQTT_QOS: "1"
+
+      INFLUX_URL: "http://influxdb:8086"
+      INFLUX_ORG: "water-monitoring"
+      INFLUX_BUCKET: "water-data"
+      INFLUX_TOKEN: "water_super_token_change_me"
+      INFLUX_MEASUREMENT: "water_telemetry"
+
+      # batch/cola (opcional, puedes dejarlo)
+      INFLUX_BATCH_SIZE: "500"
+      INFLUX_FLUSH_INTERVAL_MS: "1000"
+      INFLUX_JITTER_INTERVAL_MS: "500"
+      INFLUX_RETRY_INTERVAL_MS: "2000"
+      INGEST_QUEUE_MAX: "20000"
+    command: ["python", "-m", "app.workers.ingestor.main"]
+    restart: unless-stopped
+
+  water-simulator:
+    build:
+      context: ./backend
+    container_name: water-simulator
+    depends_on:
+      - mosquitto
+    environment:
+      MQTT_HOST: "mosquitto"
+      MQTT_PORT: "1883"
+      SITE: "indatta"
+      INTERVAL_SEC: "30"
+    command: ["python", "app/workers/sim_flow_sensors.py"]
+    restart: unless-stopped

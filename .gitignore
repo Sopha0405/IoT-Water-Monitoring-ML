@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Docker / runtime
+mosquitto/data/
+mosquitto/log/
+influxdb/data/
+influxdb/config/
+
+# OS / IDE
+.vscode/
+.DS_Store
+Thumbs.db
