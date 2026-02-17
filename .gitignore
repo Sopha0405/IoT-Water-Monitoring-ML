@@ -9,6 +9,8 @@ mosquitto/data/
 mosquitto/log/
 influxdb/data/
 influxdb/config/
+frontend/node_modules/
+node_modules/
 
 # OS / IDE
 .vscode/
