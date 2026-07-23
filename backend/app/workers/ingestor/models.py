@@ -5,16 +5,40 @@ from typing import Any, Dict, Tuple
 
 from influxdb_client import Point, WritePrecision
 
+
 def parse_ts(ts: str) -> datetime:
     if ts.endswith("Z"):
         ts = ts.replace("Z", "+00:00")
     return datetime.fromisoformat(ts)
+
 
 def extract_from_topic(topic: str) -> Tuple[str | None, str | None]:
     parts = topic.split("/")
     if len(parts) >= 5:
         return parts[2], parts[3]
     return None, None
+
+
+FIELD_LIMITS = {
+    "flow_lpm": (0.0, 60.0),
+    "total_liters": (0.0, 1_000_000.0),
+    "battery_v": (0.0, 5.5),
+    "rssi": (-130.0, 0.0),
+}
+
+
+def clean_float(field: str, value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    low, high = FIELD_LIMITS[field]
+    return round(min(high, max(low, number)), 3)
+
 
 @dataclass(frozen=True)
 class Telemetry:
@@ -49,13 +73,10 @@ class Telemetry:
         ts = parse_ts(str(payload["ts"]))
 
         fields: Dict[str, float] = {}
-        for k in ("flow_lpm", "total_liters", "battery_v", "rssi"):
-            if k in payload and payload[k] is not None:
-                try:
-                    fields[k] = float(payload[k])
-                except (TypeError, ValueError):
-                    # ignora field inválido
-                    pass
+        for k in FIELD_LIMITS:
+            cleaned = clean_float(k, payload.get(k))
+            if cleaned is not None:
+                fields[k] = cleaned
 
         return Telemetry(
             schema_version=schema_version,

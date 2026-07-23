@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt
+from jose import jwt, JWTError
 from passlib.context import CryptContext
 
 from app.core.config import settings
+from typing import Dict, Any
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -22,3 +23,13 @@ def create_access_token(*, subject: str, expires_minutes: int | None = None) -> 
     )
     to_encode = {"sub": subject, "exp": expire}
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+def decode_token(token: str) -> Dict[str, Any]:
+    try:
+        return jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError:
+        raise Exception("Invalid token")

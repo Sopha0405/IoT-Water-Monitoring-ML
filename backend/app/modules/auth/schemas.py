@@ -8,12 +8,12 @@ class LoginIn(BaseModel):
 
 class UserOut(BaseModel):
     id: int
+    name: str
     email: EmailStr
-    first_name: str
-    last_paternal: str | None = None
-    last_maternal: str | None = None
+    phone: str | None = None
+    floor: str | None = None
     role_id: int
-    tenant_id: int | None = None
+    is_active: bool
 
     class Config:
         from_attributes = True

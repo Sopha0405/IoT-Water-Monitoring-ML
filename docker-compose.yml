@@ -20,24 +20,25 @@ services:
       - "./influxdb/config:/etc/influxdb2"
     environment:
       DOCKER_INFLUXDB_INIT_MODE: "setup"
-      DOCKER_INFLUXDB_INIT_USERNAME: "Sofia"
-      DOCKER_INFLUXDB_INIT_PASSWORD: "Sofia0405"
-      DOCKER_INFLUXDB_INIT_ORG: "water-monitoring"
-      DOCKER_INFLUXDB_INIT_BUCKET: "water-data"
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: "water_super_token_change_me"
+      DOCKER_INFLUXDB_INIT_USERNAME: "${INFLUX_USERNAME:-water_admin}"
+      DOCKER_INFLUXDB_INIT_PASSWORD: "${INFLUX_PASSWORD:-change_me}"
+      DOCKER_INFLUXDB_INIT_ORG: "${INFLUX_ORG:-water-monitoring}"
+      DOCKER_INFLUXDB_INIT_BUCKET: "${INFLUX_BUCKET:-water-data}"
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: "${INFLUX_TOKEN:-change_me}"
     restart: unless-stopped
 
   postgres:
     image: postgres:16
     container_name: postgres
     environment:
-      POSTGRES_DB: water_app
-      POSTGRES_USER: Sofia
-      POSTGRES_PASSWORD: Sofia0405
+      POSTGRES_DB: "${POSTGRES_DB:-water_app}"
+      POSTGRES_USER: "${POSTGRES_USER:-water_user}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-change_me}"
     ports:
       - "5432:5432"
     volumes:
-      - ./postgres/data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
 
   backend:
@@ -50,13 +51,14 @@ services:
       MQTT_HOST: "mosquitto"
       MQTT_PORT: "1883"
       INFLUX_URL: "http://influxdb:8086"
-      INFLUX_ORG: "water-monitoring"
-      INFLUX_BUCKET: "water-data"
-      INFLUX_TOKEN: "water_super_token_change_me"
-      JWT_SECRET_KEY: "super_secret_change_me"
-      DATABASE_URL: "postgresql+psycopg://Sofia:Sofia0405@postgres:5432/water_app"
+      INFLUX_ORG: "${INFLUX_ORG:-water-monitoring}"
+      INFLUX_BUCKET: "${INFLUX_BUCKET:-water-data}"
+      INFLUX_TOKEN: "${INFLUX_TOKEN:-change_me}"
+      INFLUX_MEASUREMENT: "${INFLUX_MEASUREMENT:-water_telemetry}"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change_me_use_a_long_random_value}"
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://water_user:change_me@postgres:5432/water_app}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
     depends_on:
-      - mosquitto
       - influxdb
       - postgres
     restart: unless-stopped
@@ -66,21 +68,19 @@ services:
       context: ./backend
     container_name: water-ingestor
     depends_on:
-      - mosquitto
       - influxdb
+      - mosquitto
     environment:
-      MQTT_HOST: "mosquitto"
+      PYTHONUNBUFFERED: "1"
+      MQTT_HOST: "${MQTT_HOST:-mosquitto}"
       MQTT_PORT: "1883"
-      MQTT_TOPIC_FILTER: "water/flow/+/+/telemetry"
-      MQTT_QOS: "1"
-
+      MQTT_TOPIC_FILTER: "${MQTT_TOPIC_FILTER:-water/flow/+/+/telemetry}"
+      MQTT_QOS: "${MQTT_QOS:-1}"
       INFLUX_URL: "http://influxdb:8086"
-      INFLUX_ORG: "water-monitoring"
-      INFLUX_BUCKET: "water-data"
-      INFLUX_TOKEN: "water_super_token_change_me"
-      INFLUX_MEASUREMENT: "water_telemetry"
-
-      # batch/cola (opcional, puedes dejarlo)
+      INFLUX_ORG: "${INFLUX_ORG:-water-monitoring}"
+      INFLUX_BUCKET: "${INFLUX_BUCKET:-water-data}"
+      INFLUX_TOKEN: "${INFLUX_TOKEN:-change_me}"
+      INFLUX_MEASUREMENT: "${INFLUX_MEASUREMENT:-water_telemetry}"
       INFLUX_BATCH_SIZE: "500"
       INFLUX_FLUSH_INTERVAL_MS: "1000"
       INFLUX_JITTER_INTERVAL_MS: "500"
@@ -96,9 +96,14 @@ services:
     depends_on:
       - mosquitto
     environment:
-      MQTT_HOST: "mosquitto"
+      PYTHONUNBUFFERED: "1"
+      MQTT_HOST: "${MQTT_HOST:-mosquitto}"
       MQTT_PORT: "1883"
-      SITE: "indatta"
-      INTERVAL_SEC: "30"
+      SITE: "${SITE:-indatta}"
+      INTERVAL_SEC: "${INTERVAL_SEC:-10}"
+      SIM_DEVICES_JSON: '[{"device_id":"floor1-python","floor":"P1","tenant":"python","meter_role":"submeter"},{"device_id":"floor3-python","floor":"P3","tenant":"python","meter_role":"submeter"}]'
     command: ["python", "app/workers/sim_flow_sensors.py"]
     restart: unless-stopped
+
+volumes:
+  pgdata:

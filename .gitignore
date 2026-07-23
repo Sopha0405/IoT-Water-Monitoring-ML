@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.pyc
+.pycache-check/
 .venv/
 .env
 
@@ -10,6 +11,10 @@ mosquitto/log/
 influxdb/data/
 influxdb/config/
 frontend/node_modules/
+frontend/build/
+frontend/build-check-verify/
+frontend/build-codex-check/
+frontend/build-codex-check-*/
 node_modules/
 postgres/data/
 influxdb/data/
