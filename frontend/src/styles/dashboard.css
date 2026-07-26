@@ -42,7 +42,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -67,7 +68,8 @@ button:hover {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--line);
@@ -79,11 +81,21 @@ select {
   font-weight: 400;
 }
 
+textarea {
+  min-height: 96px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
 option {
   font-weight: 400;
 }
 
 input::placeholder {
+  color: #788aa4;
+}
+
+textarea::placeholder {
   color: #788aa4;
 }
 
@@ -202,6 +214,22 @@ p {
 .page-error {
   margin-top: -12px;
   margin-bottom: 22px;
+}
+
+.status-banner {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.status-banner.success {
+  border-color: rgba(0, 212, 155, 0.35);
+  background: rgba(0, 212, 155, 0.08);
+  color: var(--green);
 }
 
 .dashboard-shell {
@@ -992,6 +1020,62 @@ td span {
   min-width: 0;
 }
 
+.table-panel.alert-table table {
+  min-width: 1480px;
+}
+
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.model-panel {
+  min-height: 100%;
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.detail-list dt,
+.detail-list dd {
+  border-bottom: 1px solid var(--line);
+  margin: 0;
+  padding: 13px 18px;
+}
+
+.detail-list dt {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.detail-list dd {
+  overflow-wrap: anywhere;
+}
+
+.detail-list dd span {
+  display: inline;
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.admin-actions button {
+  width: auto;
+}
+
 .table-panel.sensor-table th:nth-child(1) {
   width: 18%;
 }
@@ -1110,6 +1194,7 @@ td span {
   }
 
   .metrics-grid,
+  .model-grid,
   .settings-grid,
   .toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1133,6 +1218,7 @@ td span {
 
   .sidebar nav,
   .metrics-grid,
+  .model-grid,
   .settings-grid,
   .toolbar,
   .toolbar.compact {

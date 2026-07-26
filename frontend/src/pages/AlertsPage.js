@@ -1,65 +1,99 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ActionPopcard } from '../components/ActionPopcard';
-import { AnomalyScoreChart } from '../components/AnomalyScoreChart';
 import { MetricCard } from '../components/MetricCard';
 import { Pill } from '../components/Pill';
-import { apiRequest } from '../lib/api';
+import {
+  getAlerts,
+  submitAlertFeedback,
+  updateAlertStatus,
+} from '../services/mlAdminService';
 import { floors, normalizeFloor } from '../lib/constants';
 
 const statusLabels = {
   open: 'Activa',
-  possible: 'Posible',
+  acknowledged: 'Reconocida',
+  reviewing: 'En revision',
+  confirmed_leak: 'Fuga confirmada',
+  false_positive: 'Falsa alerta',
   resolved: 'Resuelta',
-  investigating: 'Investigando',
+  closed: 'Cerrada',
   attended: 'Atendida',
+  investigating: 'Investigando',
+  possible: 'Posible',
 };
 
+const statusOptions = [
+  ['acknowledged', 'Reconocer alerta'],
+  ['reviewing', 'Poner en revision'],
+  ['confirmed_leak', 'Confirmar fuga'],
+  ['false_positive', 'Marcar falsa alerta'],
+  ['resolved', 'Resolver'],
+  ['closed', 'Cerrar'],
+];
+
+function formatDate(value) {
+  if (!value) return '-';
+  return String(value).replace('T', ' ').slice(0, 16);
+}
+
+function numberValue(...values) {
+  const found = values.find((value) => value !== undefined && value !== null && value !== '');
+  const parsed = Number(found);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function scoreValue(alert) {
+  return numberValue(alert.max_score, alert.score_max, alert.risk_percentage);
+}
+
+function severityTone(value) {
+  const severity = String(value || '').toLowerCase();
+  if (['critical', 'critica', 'alta', 'high'].includes(severity)) return 'danger';
+  if (['medium', 'media', 'warning'].includes(severity)) return 'warning';
+  return 'success';
+}
+
 function statusTone(status) {
-  if (status === 'open') return 'danger';
-  if (status === 'possible') return 'warning';
-  if (status === 'investigating') return 'warning';
+  if (['open', 'confirmed_leak'].includes(status)) return 'danger';
+  if (['acknowledged', 'reviewing', 'investigating', 'possible'].includes(status)) return 'warning';
   return 'success';
 }
 
-function riskTone(value) {
-  if (value >= 85) return 'danger';
-  if (value >= 50) return 'warning';
-  return 'success';
-}
-
-function displayStatus(alert) {
-  const risk = Number(alert.risk_percentage || 0);
-  if (risk >= 50 && risk < 85) return 'possible';
-  return alert.status;
-}
-
-function alertTypeLabel(alert) {
-  if (Number(alert.risk_percentage || 0) >= 85) return 'Riesgo alto';
-  return 'Posible fuga';
+function feedbackPayload(alert, status, notes) {
+  const score = scoreValue(alert) || 0;
+  const threshold = numberValue(alert.threshold, alert.decision_threshold) || 85;
+  return {
+    sensor_id: alert.sensor_id || alert.device_id || '',
+    model_version: alert.model_version || null,
+    prediction_score: score,
+    decision_threshold: threshold,
+    predicted_anomaly: status !== 'false_positive',
+    operator_label: status === 'false_positive' ? 'false_positive' : 'true_positive',
+    operator_event_type: status,
+    feedback_status: 'reviewed',
+    notes,
+    window_start: alert.window_start || alert.detected_at || new Date().toISOString(),
+    window_end: alert.window_end || alert.last_detected_at || alert.detected_at || new Date().toISOString(),
+    source_data_hash: alert.source_data_hash || `alert-${alert.id}`,
+  };
 }
 
 export function AlertsPage({ token }) {
   const [alerts, setAlerts] = useState([]);
-  const [analyses, setAnalyses] = useState([]);
-  const [status, setStatus] = useState('Todas las alertas');
+  const [status, setStatus] = useState('Todas');
   const [floor, setFloor] = useState('Todos');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [attendTarget, setAttendTarget] = useState(null);
-  const [statusTarget, setStatusTarget] = useState(null);
-  const [statusDraft, setStatusDraft] = useState('open');
+  const [target, setTarget] = useState(null);
+  const [statusDraft, setStatusDraft] = useState('acknowledged');
+  const [notes, setNotes] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setMessage('');
     try {
-      const [alertData, analysisData] = await Promise.all([
-        apiRequest('/api/v1/alerts/', { token }),
-        apiRequest('/api/v1/ml-analysis/', { token }),
-      ]);
-      setAlerts(alertData);
-      setAnalyses(analysisData);
+      setAlerts(await getAlerts(token));
     } catch (err) {
       setMessage(err.message);
     } finally {
@@ -71,106 +105,59 @@ export function AlertsPage({ token }) {
     loadData();
   }, [loadData]);
 
-  async function runAnalysis() {
-    setLoading(true);
-    setMessage('');
-    try {
-      const result = await apiRequest('/api/v1/ml-analysis/run', { token, method: 'POST' });
-      await loadData();
-      setMessage(`${result.anomalies} registros nuevos.`);
-    } catch (err) {
-      setMessage(err.message);
-    } finally {
-      setLoading(false);
-    }
+  function openStatusEditor(alert, nextStatus = alert.status || 'acknowledged') {
+    setTarget(alert);
+    setStatusDraft(nextStatus);
+    setNotes(alert.observations || alert.description || '');
   }
 
-  async function attendAlert() {
-    if (!attendTarget) return;
+  async function saveStatus() {
+    if (!target) return;
     setLoading(true);
     setMessage('');
     const previousAlerts = alerts;
     setAlerts((items) => items.map((alert) => (
-      alert.id === attendTarget.id
-        ? { ...alert, status: 'attended', attended_at: new Date().toISOString() }
+      alert.id === target.id
+        ? { ...alert, status: statusDraft, observations: notes, description: notes || alert.description }
         : alert
     )));
     try {
-      await apiRequest(`/api/v1/alerts/${attendTarget.id}/attend`, { token, method: 'PATCH' });
-      await loadData();
-      setAttendTarget(null);
-      setMessage('Alerta atendida correctamente.');
+      const updated = await updateAlertStatus(token, target.id, statusDraft, { observations: notes });
+      if (['confirmed_leak', 'false_positive'].includes(statusDraft)) {
+        await submitAlertFeedback(token, target.id, feedbackPayload(target, statusDraft, notes));
+      }
+      setAlerts((items) => items.map((alert) => (alert.id === target.id ? { ...alert, ...updated } : alert)));
+      setTarget(null);
+      setMessage('Estado y comentarios guardados.');
     } catch (err) {
       setAlerts(previousAlerts);
-      setMessage(`No se pudo atender la alerta: ${err.message}`);
+      setMessage(`No se pudo guardar la alerta: ${err.message}`);
     } finally {
       setLoading(false);
     }
   }
 
-  function openStatusEditor(alert) {
-    setStatusTarget(alert);
-    setStatusDraft(displayStatus(alert) || 'open');
-  }
-
-  async function saveAlertStatus() {
-    if (!statusTarget) return;
-    setLoading(true);
-    setMessage('');
-    const previousAlerts = alerts;
-    setAlerts((items) => items.map((alert) => (
-      alert.id === statusTarget.id ? { ...alert, status: statusDraft } : alert
-    )));
-    try {
-      await apiRequest(`/api/v1/alerts/${statusTarget.id}`, {
-        token,
-        method: 'PUT',
-        body: { status: statusDraft },
-      });
-      await loadData();
-      setStatusTarget(null);
-      setMessage('Estado actualizado.');
-    } catch (err) {
-      setAlerts(previousAlerts);
-      setMessage(`No se pudo actualizar el estado: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const visibleAlerts = useMemo(() => alerts.filter((alert) => Number(alert.risk_percentage || 0) >= 50), [alerts]);
-
-  const filtered = useMemo(() => visibleAlerts.filter((alert) => {
-    const label = statusLabels[displayStatus(alert)] || displayStatus(alert);
-    const matchesStatus = status === 'Todas las alertas' || label === status;
+  const filtered = useMemo(() => alerts.filter((alert) => {
+    const matchesStatus = status === 'Todas' || alert.status === status;
     const matchesFloor = floor === 'Todos' || normalizeFloor(alert.floor) === floor;
     return matchesStatus && matchesFloor;
-  }), [visibleAlerts, status, floor]);
+  }), [alerts, status, floor]);
 
-  const visibleAnalyses = useMemo(() => analyses.filter((item) => (
-    item.prediction === 'anomaly' && Number(item.anomaly_score || 0) >= 50
-  )), [analyses]);
-
-  const active = visibleAlerts.filter((alert) => alert.status === 'open' && Number(alert.risk_percentage || 0) >= 85).length;
-  const critical = visibleAlerts.filter((alert) => Number(alert.risk_percentage || 0) >= 85).length;
-  const possible = visibleAlerts.filter((alert) => Number(alert.risk_percentage || 0) >= 50 && Number(alert.risk_percentage || 0) < 85).length;
-  const averageRisk = visibleAlerts.length
-    ? Math.round(visibleAlerts.reduce((sum, alert) => sum + Number(alert.risk_percentage || 0), 0) / visibleAlerts.length)
-    : 0;
+  const activeCount = alerts.filter((alert) => ['open', 'acknowledged', 'reviewing', 'confirmed_leak'].includes(alert.status)).length;
+  const leakCount = alerts.filter((alert) => alert.status === 'confirmed_leak').length;
+  const falseCount = alerts.filter((alert) => alert.status === 'false_positive').length;
+  const maxScore = alerts.reduce((max, alert) => Math.max(max, scoreValue(alert) || 0), 0);
 
   return (
     <>
       <header className="page-header">
         <div>
           <h1>Alertas</h1>
-          <p>Eventos recientes que requieren revision</p>
+          <p>Eventos generados por FastAPI a partir del modelo activo y almacenados como DTOs operativos.</p>
         </div>
         <div className="header-actions">
           <button className="secondary-action" onClick={loadData} disabled={loading}>
             {loading ? 'Actualizando...' : 'Actualizar'}
-          </button>
-          <button className="primary-action" onClick={runAnalysis} disabled={loading}>
-            Analizar
           </button>
         </div>
       </header>
@@ -178,32 +165,20 @@ export function AlertsPage({ token }) {
       {message && <div className="form-error page-error">{message}</div>}
 
       <section className="metrics-grid">
-        <MetricCard label="Alertas activas" value={active} tone="critical" />
-        <MetricCard label="Por atender" value={critical} tone="critical" />
-        <MetricCard label="Posibilidades" value={possible} tone="warning" />
-        <MetricCard label="Riesgo promedio" value={`${averageRisk}%`} tone={averageRisk > 75 ? 'critical' : 'warning'} />
-      </section>
-
-      <section className="panel chart-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Nivel de riesgo</h2>
-            <p>Desde 50 puntos</p>
-          </div>
-        </div>
-        <AnomalyScoreChart analyses={visibleAnalyses} />
+        <MetricCard label="Alertas activas" value={activeCount} tone="critical" />
+        <MetricCard label="Fugas confirmadas" value={leakCount} tone="critical" />
+        <MetricCard label="Falsas alertas" value={falseCount} tone="warning" />
+        <MetricCard label="Score maximo" value={maxScore.toFixed(0)} tone={maxScore >= 85 ? 'critical' : 'warning'} />
       </section>
 
       <section className="toolbar compact two-cols">
         <label>
           Filtrar por estado
           <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option>Todas las alertas</option>
-            <option>Activa</option>
-            <option>Posible</option>
-            <option>Resuelta</option>
-            <option>Investigando</option>
-            <option>Atendida</option>
+            <option value="Todas">Todas las alertas</option>
+            {Object.entries(statusLabels).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
         </label>
         <label>
@@ -214,90 +189,81 @@ export function AlertsPage({ token }) {
         </label>
       </section>
 
-      <section className="panel table-panel">
+      <section className="panel table-panel alert-table">
         <h2>Registro de alertas ({filtered.length})</h2>
         <table>
           <thead>
             <tr>
-              <th>Hora</th>
               <th>Sensor</th>
               <th>Piso</th>
               <th>Tipo</th>
-              <th>Riesgo</th>
+              <th>Severidad</th>
+              <th>Inicio</th>
+              <th>Ultima deteccion</th>
               <th>Estado</th>
-              <th>Descripcion</th>
+              <th>Score max.</th>
+              <th>Caudal prom.</th>
+              <th>Ventanas</th>
+              <th>Modelo</th>
+              <th>Responsable</th>
+              <th>Observaciones</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((alert) => (
-              <tr key={alert.id}>
-                <td>{alert.detected_at ? alert.detected_at.replace('T', ' ').slice(0, 16) : '-'}</td>
-                <td><strong>{alert.device_id}</strong></td>
-                <td>{normalizeFloor(alert.floor)}</td>
-                <td><Pill tone="neutral">{alertTypeLabel(alert)}</Pill></td>
-                <td><Pill tone={riskTone(Number(alert.risk_percentage || 0))}>{Number(alert.risk_percentage || 0).toFixed(0)}%</Pill></td>
-                <td><Pill tone={statusTone(displayStatus(alert))}>{statusLabels[displayStatus(alert)] || displayStatus(alert)}</Pill></td>
-                <td>{alert.description || '-'}</td>
-                <td className="actions">
-                  {Number(alert.risk_percentage || 0) >= 85 && alert.status !== 'attended' ? (
-                    <button onClick={() => setAttendTarget(alert)} disabled={loading}>
-                      Atender
-                    </button>
-                  ) : (
-                    <button onClick={() => openStatusEditor(alert)} disabled={loading}>
-                      Estado
-                    </button>
-                  )}
-                  {Number(alert.risk_percentage || 0) >= 85 && alert.status !== 'attended' && (
-                    <button onClick={() => openStatusEditor(alert)} disabled={loading}>
-                      Estado
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {filtered.map((alert) => {
+              const score = scoreValue(alert);
+              return (
+                <tr key={alert.id}>
+                  <td><strong>{alert.sensor_id || alert.device_id}</strong></td>
+                  <td>{normalizeFloor(alert.floor)}</td>
+                  <td>{alert.alert_type || alert.anomaly_type || '-'}</td>
+                  <td><Pill tone={severityTone(alert.severity)}>{alert.severity || '-'}</Pill></td>
+                  <td>{formatDate(alert.started_at || alert.detected_at)}</td>
+                  <td>{formatDate(alert.last_detected_at || alert.detected_at)}</td>
+                  <td><Pill tone={statusTone(alert.status)}>{statusLabels[alert.status] || alert.status || '-'}</Pill></td>
+                  <td>{score === null ? '-' : score.toFixed(1)}</td>
+                  <td>{numberValue(alert.avg_flow, alert.average_flow, alert.observed_value)?.toFixed(2) || '-'}</td>
+                  <td>{alert.window_count || alert.windows_count || alert.samples_used || '-'}</td>
+                  <td>{alert.model_version || alert.model_name || '-'}</td>
+                  <td>{alert.assignee || alert.responsible || alert.attended_by || '-'}</td>
+                  <td>{alert.observations || alert.description || '-'}</td>
+                  <td className="actions">
+                    <button onClick={() => openStatusEditor(alert)} disabled={loading}>Gestionar</button>
+                  </td>
+                </tr>
+              );
+            })}
             {!filtered.length && (
               <tr>
-                <td colSpan="8">No hay alertas para mostrar.</td>
+                <td colSpan="14">No hay alertas para mostrar.</td>
               </tr>
             )}
           </tbody>
         </table>
       </section>
 
-      {attendTarget && (
+      {target && (
         <ActionPopcard
-          title="Atender alerta"
-          description={`Marcar como atendida la alerta de ${attendTarget.device_id}.`}
-          confirmLabel="Atender"
-          loading={loading}
-          onConfirm={attendAlert}
-          onClose={() => setAttendTarget(null)}
-        >
-          <p className="popcard-note">{attendTarget.description || 'Se registrara la atencion en el backend.'}</p>
-        </ActionPopcard>
-      )}
-
-      {statusTarget && (
-        <ActionPopcard
-          title="Editar estado"
-          description={`Actualizar estado de ${statusTarget.device_id}.`}
+          title="Gestionar alerta"
+          description={`Actualizar alerta de ${target.sensor_id || target.device_id}.`}
           confirmLabel="Guardar"
           loading={loading}
-          onConfirm={saveAlertStatus}
-          onClose={() => setStatusTarget(null)}
+          onConfirm={saveStatus}
+          onClose={() => setTarget(null)}
         >
           <div className="popcard-grid single">
             <label>
               Estado
               <select value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)}>
-                <option value="open">Activa</option>
-                <option value="possible">Posible</option>
-                <option value="investigating">Investigando</option>
-                <option value="attended">Atendida</option>
-                <option value="resolved">Resuelta</option>
+                {statusOptions.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
               </select>
+            </label>
+            <label>
+              Comentarios
+              <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones del operador" />
             </label>
           </div>
         </ActionPopcard>

@@ -7,13 +7,25 @@ import { apiRequest } from './lib/api';
 import { ControlPanel } from './pages/ControlPanel';
 import { AlertsPage } from './pages/AlertsPage';
 import { ConfigurationPage } from './pages/ConfigurationPage';
+import { MLModelAdminPage } from './pages/MLModelAdminPage';
 import { SensorManagement } from './pages/SensorManagement';
 import { UserManagement } from './pages/UserManagement';
+
+const pathToSection = {
+  '/': 'dashboard',
+  '/alerts': 'alerts',
+  '/admin/ml-model': 'ml-model',
+  '/users': 'users',
+  '/sensors': 'sensors',
+  '/settings': 'settings',
+};
+
+const sectionToPath = Object.fromEntries(Object.entries(pathToSection).map(([path, section]) => [section, path]));
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('water_token') || '');
   const [currentUser, setCurrentUser] = useState(null);
-  const [active, setActive] = useState('dashboard');
+  const [active, setActive] = useState(() => pathToSection[window.location.pathname] || 'dashboard');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -31,6 +43,25 @@ function App() {
       setCurrentUser(null);
     });
   }, [token, loadCurrentUser]);
+
+  useEffect(() => {
+    const path = sectionToPath[active] || '/';
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+    }
+  }, [active]);
+
+  useEffect(() => {
+    const handlePopState = () => setActive(pathToSection[window.location.pathname] || 'dashboard');
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (currentUser && currentUser.role_id !== 3 && active === 'ml-model') {
+      setActive('dashboard');
+    }
+  }, [active, currentUser]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -73,7 +104,7 @@ function App() {
     );
   }
 
-  const role = currentUser.role_id === 2 ? 'tecnico' : 'supervisor';
+  const role = currentUser.role_id === 3 ? 'admin' : currentUser.role_id === 2 ? 'tecnico' : 'supervisor';
 
   return (
     <DashboardLayout
@@ -87,6 +118,7 @@ function App() {
       {active === 'users' && <UserManagement token={token} currentUser={currentUser} />}
       {active === 'sensors' && <SensorManagement token={token} />}
       {active === 'alerts' && <AlertsPage token={token} />}
+      {active === 'ml-model' && role === 'admin' && <MLModelAdminPage token={token} />}
       {active === 'settings' && <ConfigurationPage />}
     </DashboardLayout>
   );
