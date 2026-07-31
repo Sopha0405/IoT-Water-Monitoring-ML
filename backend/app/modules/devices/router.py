@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+﻿from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin
@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.db.postgres import get_db
 from app.modules.devices.model import Device
 from app.modules.devices.schemas import DeviceCreate, DeviceOut, DeviceUpdate
+from app.modules.telemetry.service import get_latest_telemetry
 from app.modules.users.model import User
 
 router = APIRouter(prefix="/api/v1/devices", tags=["devices"])
@@ -28,6 +29,68 @@ def list_devices(
             return []
         query = query.filter(Device.floor == current_user.floor)
     return query.order_by(Device.floor.asc(), Device.device_id.asc()).all()
+
+
+@router.get("/iot/config")
+def iot_config(current_user: User = Depends(get_current_user)):
+    del current_user
+    return {
+        "site": settings.site,
+        "topic_template": settings.mqtt_topic_template,
+        "sample_seconds": 5,
+        "required_payload_fields": [
+            "schema_version",
+            "site",
+            "device_id",
+            "floor",
+            "flow_lpm",
+            "sample_seconds",
+            "status",
+            "simulated",
+            "ts",
+        ],
+    }
+
+
+@router.get("/active-telemetry")
+def active_telemetry_devices(
+    floor: str | None = None,
+    limit: int = 300,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    devices = {device.device_id: device for device in db.query(Device).all()}
+    points = get_latest_telemetry(floor=floor, field="flow_lpm", limit=limit)
+    latest_by_device = {}
+    for point in sorted(points, key=lambda item: item.time, reverse=True):
+        if point.source != "real" or not point.device_id or point.device_id in latest_by_device:
+            continue
+        latest_by_device[point.device_id] = point
+
+    rows = []
+    for device_id, point in latest_by_device.items():
+        device = devices.get(device_id)
+        row_floor = point.floor or (device.floor if device else None)
+        if current_user.role_id != settings.admin_role_id and row_floor != current_user.floor:
+            continue
+        rows.append(
+            {
+                "id": device.id if device else None,
+                "device_id": device_id,
+                "floor": row_floor,
+                "location": device.location if device and device.location else None,
+                "sensor_type": device.sensor_type if device else None,
+                "status": "active",
+                "registered": bool(device),
+                "reading": point.value,
+                "last_seen": point.time,
+                "source": point.source,
+                "site": point.site,
+                "tenant": point.tenant,
+                "mqtt_topic": settings.mqtt_topic_template.format(site=settings.site, device_id=device_id),
+            }
+        )
+    return sorted(rows, key=lambda item: (str(item["floor"] or ""), item["device_id"]))
 
 
 @router.get("/{device_pk}", response_model=DeviceOut)
@@ -100,4 +163,8 @@ def delete_device(
     db.delete(device)
     db.commit()
     return {"deleted": True}
+
+
+
+
 

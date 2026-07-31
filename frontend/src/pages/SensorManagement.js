@@ -3,8 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActionPopcard } from '../components/ActionPopcard';
 import { MetricCard } from '../components/MetricCard';
 import { Pill } from '../components/Pill';
-import { apiRequest } from '../lib/api';
 import { floors, normalizeFloor, statusClass } from '../lib/constants';
+import {
+  createDevice,
+  deleteDevice,
+  getActiveTelemetryDevices,
+  getIotConfig,
+  updateDevice,
+} from '../services/deviceService';
 
 const statusLabels = {
   active: 'En Linea',
@@ -16,12 +22,29 @@ function displayStatus(value) {
   return statusLabels[value] || value || 'Sin estado';
 }
 
+function formatDate(value) {
+  if (!value) return '-';
+  const raw = String(value);
+  const date = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(raw) ? raw : `${raw.replace(' ', 'T')}Z`);
+  if (Number.isNaN(date.getTime())) return raw.replace('T', ' ').slice(0, 16);
+  return date.toLocaleString('es-BO', {
+    timeZone: 'America/La_Paz',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
 export function SensorManagement({ token }) {
   const [sensors, setSensors] = useState([]);
+  const [iotConfig, setIotConfig] = useState(null);
   const [hiddenTelemetryIds, setHiddenTelemetryIds] = useState([]);
   const [query, setQuery] = useState('');
   const [floor, setFloor] = useState('Todos');
-  const [status, setStatus] = useState('Todos');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [popcard, setPopcard] = useState(null);
@@ -37,44 +60,18 @@ export function SensorManagement({ token }) {
     setLoading(true);
     setMessage('');
     try {
-      const [devices, telemetry] = await Promise.all([
-        apiRequest('/api/v1/devices/', { token }),
-        apiRequest('/api/v1/telemetry/latest?field=flow_lpm&limit=300', { token }),
+      const [activeSensors, config] = await Promise.all([
+        getActiveTelemetryDevices(token, { floor, limit: 300 }),
+        getIotConfig(token),
       ]);
-      const deviceMeta = Object.fromEntries(devices.map((device) => [device.device_id, device]));
-      const latestByDevice = telemetry
-        .filter((point) => point.device_id)
-        .slice()
-        .sort((a, b) => new Date(b.time) - new Date(a.time))
-        .reduce((acc, point) => {
-          if (!acc[point.device_id]) acc[point.device_id] = point;
-          return acc;
-        }, {});
-
-      const liveSensors = Object.entries(latestByDevice).map(([deviceId, point]) => {
-        const meta = deviceMeta[deviceId] || {};
-        const ageMs = Date.now() - new Date(point.time).getTime();
-        const isFresh = Number.isFinite(ageMs) && ageMs < 2 * 60 * 1000;
-        return {
-          id: meta.id || deviceId,
-          dbId: meta.id || null,
-          device_id: deviceId,
-          floor: point.floor || meta.floor,
-          location: meta.location || (deviceId === 'pb-wokwi' ? 'Medidor Wokwi - Planta Baja' : 'Telemetria MQTT'),
-          status: isFresh ? 'active' : 'offline',
-          reading: Number(point.value || 0),
-          last_seen: point.time,
-          last_calibration: meta.last_calibration || null,
-          source: point.tenant || point.site || 'MQTT',
-        };
-      });
-      setSensors(liveSensors);
+      setIotConfig(config);
+      setSensors(Array.isArray(activeSensors) ? activeSensors : []);
     } catch (err) {
       setMessage(err.message);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, floor]);
 
   useEffect(() => {
     loadSensors();
@@ -82,12 +79,10 @@ export function SensorManagement({ token }) {
 
   const filtered = useMemo(() => sensors.filter((sensor) => {
     if (hiddenTelemetryIds.includes(sensor.device_id)) return false;
-    const label = displayStatus(sensor.status);
     const matchesText = `${sensor.device_id} ${sensor.location || ''}`.toLowerCase().includes(query.toLowerCase());
     const matchesFloor = floor === 'Todos' || normalizeFloor(sensor.floor) === floor;
-    const matchesStatus = status === 'Todos' || label === status;
-    return matchesText && matchesFloor && matchesStatus;
-  }), [sensors, hiddenTelemetryIds, query, floor, status]);
+    return matchesText && matchesFloor;
+  }), [sensors, hiddenTelemetryIds, query, floor]);
 
   function openCreateSensor() {
     setForm({ device_id: '', floor: 'PB', location: '', sensor_type: 'FS300A', status: 'active' });
@@ -117,13 +112,13 @@ export function SensorManagement({ token }) {
         ...form,
         floor: form.floor === 'Todos' ? null : form.floor,
       };
-      if (popcard?.type === 'edit' && popcard.sensor.dbId) {
-        await apiRequest(`/api/v1/devices/${popcard.sensor.dbId}`, { token, method: 'PUT', body });
+      if (popcard?.type === 'edit' && popcard.sensor.id) {
+        await updateDevice(token, popcard.sensor.id, body);
         setMessage('Sensor actualizado correctamente.');
       } else {
-        await apiRequest('/api/v1/devices/', { token, method: 'POST', body });
+        await createDevice(token, body);
         setHiddenTelemetryIds((items) => items.filter((item) => item !== form.device_id));
-        setMessage(popcard?.type === 'edit' ? 'Sensor registrado en inventario.' : 'Sensor agregado correctamente.');
+        setMessage(popcard?.type === 'edit' ? 'Sensor registrado. Aparecera como activo cuando publique telemetria.' : 'Sensor registrado. Aparecera como activo cuando publique telemetria.');
       }
       setPopcard(null);
       await loadSensors();
@@ -140,8 +135,8 @@ export function SensorManagement({ token }) {
     setLoading(true);
     setMessage('');
     try {
-      if (sensor.dbId) {
-        await apiRequest(`/api/v1/devices/${sensor.dbId}`, { token, method: 'DELETE' });
+      if (sensor.id) {
+        await deleteDevice(token, sensor.id);
         setMessage('Sensor eliminado del inventario.');
       } else {
         setHiddenTelemetryIds((items) => [...new Set([...items, sensor.device_id])]);
@@ -182,34 +177,26 @@ export function SensorManagement({ token }) {
             {floors.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
-        <label>
-          Filtrar por estado
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option>Todos</option>
-            <option>En Linea</option>
-            <option>Desconectado</option>
-            <option>Mantenimiento</option>
-          </select>
-        </label>
       </section>
 
       {message && <div className="form-error page-error">{message}</div>}
 
       <section className="metrics-grid">
-        <MetricCard label="Total de sensores" value={sensors.length} />
-        <MetricCard label="En linea" value={sensors.filter((sensor) => sensor.status === 'active').length} tone="ok" />
-        <MetricCard label="Desconectados" value={sensors.filter((sensor) => sensor.status === 'offline').length} tone="critical" />
-        <MetricCard label="En mantenimiento" value={sensors.filter((sensor) => sensor.status === 'maintenance').length} tone="warning" />
+        <MetricCard icon="sensors" label="Sensores activos" value={sensors.length} />
+        <MetricCard icon="wifi" label="Con telemetria real" value={sensors.filter((sensor) => sensor.source === 'real' || sensor.last_seen).length} tone="ok" />
+        <MetricCard icon="inventory_2" label="Registrados" value={sensors.filter((sensor) => sensor.registered).length} tone="blue" />
+        <MetricCard icon="schedule" label="Actualizados" value={sensors.filter((sensor) => sensor.last_seen).length} tone="ok" />
       </section>
 
       <section className="panel table-panel sensor-table">
-        <h2>Listado de Sensores ({filtered.length})</h2>
+        <h2>Sensores activos ({filtered.length})</h2>
         <table>
           <thead>
             <tr>
               <th>ID Sensor</th>
               <th>Ubicacion (Piso)</th>
               <th>Estado</th>
+              <th>Origen</th>
               <th>Lectura actual</th>
               <th>Ultimo dato</th>
               <th>Acciones</th>
@@ -219,10 +206,11 @@ export function SensorManagement({ token }) {
             {filtered.map((sensor) => (
               <tr key={sensor.id}>
                 <td><strong>{sensor.device_id}</strong></td>
-                <td><strong>{sensor.location || '-'}</strong><span>{normalizeFloor(sensor.floor)} - {sensor.source}</span></td>
+                <td><strong>{sensor.location || 'Sin ubicacion registrada'}</strong><span>{normalizeFloor(sensor.floor)} - {sensor.site || 'telemetria'}</span></td>
                 <td><Pill tone={statusClass(displayStatus(sensor.status))}>{displayStatus(sensor.status)}</Pill></td>
-                <td><strong>{Number(sensor.reading || 0).toFixed(2)}</strong> <span>L/min</span></td>
-                <td>{sensor.last_seen ? sensor.last_seen.replace('T', ' ').slice(0, 19) : '-'}</td>
+                <td><Pill tone={sensor.registered ? 'success' : 'warning'}>{sensor.registered ? 'Registrado' : 'No registrado'}</Pill></td>
+                <td>{sensor.reading === null ? '-' : <><strong>{Number(sensor.reading || 0).toFixed(2)}</strong> <span>L/min</span></>}</td>
+                <td>{formatDate(sensor.last_seen)}</td>
                 <td className="actions">
                   <button onClick={() => openEditSensor(sensor)}>Editar</button>
                   <button className="delete" onClick={() => openDeleteSensor(sensor)}>Eliminar</button>
@@ -231,7 +219,7 @@ export function SensorManagement({ token }) {
             ))}
             {!filtered.length && (
               <tr>
-                <td colSpan="6">No hay sensores para mostrar.</td>
+                <td colSpan="7">No hay sensores para mostrar.</td>
               </tr>
             )}
           </tbody>
@@ -241,7 +229,7 @@ export function SensorManagement({ token }) {
       {(popcard?.type === 'create' || popcard?.type === 'edit') && (
         <ActionPopcard
           title={popcard.type === 'edit' ? 'Editar sensor' : 'Anadir sensor'}
-          description={popcard.type === 'edit' && !popcard.sensor.dbId ? 'Este sensor viene de telemetria MQTT. Al guardar, se registrara en el inventario.' : 'Actualiza los metadatos del sensor.'}
+          description={popcard.type === 'edit' && !popcard.sensor.id ? 'Este sensor viene de telemetria MQTT. Al guardar, se registrara en el inventario.' : 'Registra el device_id que enviara telemetria MQTT.'}
           confirmLabel={popcard.type === 'edit' ? 'Guardar cambios' : 'Crear sensor'}
           loading={loading}
           onConfirm={saveSensor}
@@ -253,6 +241,9 @@ export function SensorManagement({ token }) {
             <label>Piso<select value={form.floor} onChange={(event) => setForm({ ...form, floor: event.target.value })}>{floors.filter((item) => item !== 'Todos').map((item) => <option key={item}>{item}</option>)}</select></label>
             <label>Estado<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="active">En Linea</option><option value="offline">Desconectado</option><option value="maintenance">Mantenimiento</option></select></label>
           </div>
+          <p className="popcard-note">
+            Topic MQTT esperado: {(iotConfig?.topic_template || '').replace('{site}', iotConfig?.site || '').replace('{device_id}', form.device_id || '{device_id}')}
+          </p>
         </ActionPopcard>
       )}
 

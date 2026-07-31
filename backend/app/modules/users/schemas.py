@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+﻿from pydantic import BaseModel, EmailStr, Field
 
 
 class UserOut(BaseModel):
@@ -35,3 +35,7 @@ class UserUpdate(BaseModel):
 
 class UserChangePassword(BaseModel):
     password: str = Field(min_length=8)
+
+
+
+

@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -9,5 +9,10 @@ class TelemetryPoint(BaseModel):
     site: str | None = None
     floor: str | None = None
     tenant: str | None = None
+    source: str = "real"
     field: str
     value: float
+
+
+
+

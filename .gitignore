@@ -20,6 +20,15 @@ postgres/data/
 influxdb/data/
 mosquitto/data/
 
+# Generated ML data and model artifacts
+backend/data/raw/dataset_sensor_pb_augmented_*.csv
+backend/data/processed/
+backend/data/evaluation/
+backend/data/retraining/
+backend/app/models/ml_analysis/*.joblib
+backend/app/models/ml_analysis/*.metadata.json
+backend/app/models/ml_analysis/metadata.json
+
 # OS / IDE
 .vscode/
 .DS_Store

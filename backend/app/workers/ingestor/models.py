@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Tuple
@@ -57,7 +57,7 @@ class Telemetry:
         site_t, device_t = extract_from_topic(topic)
 
         schema_version = int(payload.get("schema_version", 1))
-        if schema_version != 1:
+        if schema_version not in {1, 2}:
             raise ValueError(f"schema_version no soportado: {schema_version}")
 
         site = str(payload.get("site") or site_t or "unknown")
@@ -104,3 +104,7 @@ class Telemetry:
         for k, v in self.fields.items():
             p.field(k, v)
         return p
+
+
+
+

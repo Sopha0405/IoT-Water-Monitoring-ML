@@ -5,9 +5,15 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - "./mosquitto/config:/mosquitto/config"
+      - "./mosquitto/config:/mosquitto/config:ro"
       - "./mosquitto/data:/mosquitto/data"
       - "./mosquitto/log:/mosquitto/log"
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/version' -C 1 -W 3 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   influxdb:
@@ -21,10 +27,17 @@ services:
     environment:
       DOCKER_INFLUXDB_INIT_MODE: "setup"
       DOCKER_INFLUXDB_INIT_USERNAME: "${INFLUX_USERNAME:-water_admin}"
-      DOCKER_INFLUXDB_INIT_PASSWORD: "${INFLUX_PASSWORD:-change_me}"
+      DOCKER_INFLUXDB_INIT_PASSWORD: "${INFLUX_PASSWORD:?Defina INFLUX_PASSWORD en .env}"
       DOCKER_INFLUXDB_INIT_ORG: "${INFLUX_ORG:-water-monitoring}"
       DOCKER_INFLUXDB_INIT_BUCKET: "${INFLUX_BUCKET:-water-data}"
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: "${INFLUX_TOKEN:-change_me}"
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: "${INFLUX_TOKEN:?Defina INFLUX_TOKEN en .env}"
+      TZ: "America/La_Paz"
+    healthcheck:
+      test: ["CMD", "influx", "ping", "--host", "http://localhost:8086"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     restart: unless-stopped
 
   postgres:
@@ -33,75 +46,114 @@ services:
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-water_app}"
       POSTGRES_USER: "${POSTGRES_USER:-water_user}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-change_me}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}"
+      TZ: "America/La_Paz"
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   backend:
     build:
       context: ./backend
     container_name: water-backend
+    env_file:
+      - .env
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/app/models:/app/app/models
     environment:
+      PYTHONUNBUFFERED: "1"
+      TZ: "America/La_Paz"
       MQTT_HOST: "mosquitto"
       MQTT_PORT: "1883"
       INFLUX_URL: "http://influxdb:8086"
       INFLUX_ORG: "${INFLUX_ORG:-water-monitoring}"
       INFLUX_BUCKET: "${INFLUX_BUCKET:-water-data}"
-      INFLUX_TOKEN: "${INFLUX_TOKEN:-change_me}"
+      INFLUX_TOKEN: "${INFLUX_TOKEN:?Defina INFLUX_TOKEN en .env}"
       INFLUX_MEASUREMENT: "${INFLUX_MEASUREMENT:-water_telemetry}"
-      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change_me_use_a_long_random_value}"
-      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://water_user:change_me@postgres:5432/water_app}"
+      INFLUX_FLOW_FIELD: "${INFLUX_FLOW_FIELD:-flow_lpm}"
+      INFLUX_DAILY_VOLUME_FIELD: "${INFLUX_DAILY_VOLUME_FIELD:-volume_accumulated_day_m3}"
+      SITE: "${SITE:-indatta}"
+      MQTT_TOPIC_TEMPLATE: "${MQTT_TOPIC_TEMPLATE:-water/flow/{site}/{device_id}/telemetry}"
+      ML_SAMPLE_TOLERANCE_SECONDS: "${ML_SAMPLE_TOLERANCE_SECONDS:-0.75}"
+      ML_ALERT_COOLDOWN_MINUTES: "${ML_ALERT_COOLDOWN_MINUTES:-15}"
+      ML_ALERT_CONFIRMATION_SECONDS: "${ML_ALERT_CONFIRMATION_SECONDS:-180}"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:?Defina JWT_SECRET_KEY en .env}"
+      DATABASE_URL: "${DATABASE_URL:?Defina DATABASE_URL en .env}"
       CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
     depends_on:
-      - influxdb
-      - postgres
+      influxdb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
     restart: unless-stopped
 
   water-ingestor:
     build:
       context: ./backend
     container_name: water-ingestor
+    env_file:
+      - .env
     depends_on:
-      - influxdb
-      - mosquitto
+      influxdb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
     environment:
       PYTHONUNBUFFERED: "1"
-      MQTT_HOST: "${MQTT_HOST:-mosquitto}"
+      TZ: "America/La_Paz"
+      MQTT_HOST: "mosquitto"
       MQTT_PORT: "1883"
       MQTT_TOPIC_FILTER: "${MQTT_TOPIC_FILTER:-water/flow/+/+/telemetry}"
       MQTT_QOS: "${MQTT_QOS:-1}"
       INFLUX_URL: "http://influxdb:8086"
       INFLUX_ORG: "${INFLUX_ORG:-water-monitoring}"
       INFLUX_BUCKET: "${INFLUX_BUCKET:-water-data}"
-      INFLUX_TOKEN: "${INFLUX_TOKEN:-change_me}"
+      INFLUX_TOKEN: "${INFLUX_TOKEN:?Defina INFLUX_TOKEN en .env}"
       INFLUX_MEASUREMENT: "${INFLUX_MEASUREMENT:-water_telemetry}"
       INFLUX_BATCH_SIZE: "500"
       INFLUX_FLUSH_INTERVAL_MS: "1000"
       INFLUX_JITTER_INTERVAL_MS: "500"
       INFLUX_RETRY_INTERVAL_MS: "2000"
       INGEST_QUEUE_MAX: "20000"
+      ML_SHADOW_MODE: "${ML_SHADOW_MODE:-false}"
+      ML_ALERT_COOLDOWN_MINUTES: "${ML_ALERT_COOLDOWN_MINUTES:-15}"
+      ML_ALERT_CONFIRMATION_SECONDS: "${ML_ALERT_CONFIRMATION_SECONDS:-180}"
     command: ["python", "-m", "app.workers.ingestor.main"]
     restart: unless-stopped
 
   water-simulator:
+    profiles: ["simulation"]
     build:
       context: ./backend
     container_name: water-simulator
+    env_file:
+      - .env
     depends_on:
-      - mosquitto
+      mosquitto:
+        condition: service_healthy
     environment:
       PYTHONUNBUFFERED: "1"
-      MQTT_HOST: "${MQTT_HOST:-mosquitto}"
+      TZ: "America/La_Paz"
+      MQTT_HOST: "mosquitto"
       MQTT_PORT: "1883"
       SITE: "${SITE:-indatta}"
-      INTERVAL_SEC: "${INTERVAL_SEC:-10}"
-      SIM_DEVICES_JSON: '[{"device_id":"floor1-python","floor":"P1","tenant":"python","meter_role":"submeter"},{"device_id":"floor3-python","floor":"P3","tenant":"python","meter_role":"submeter"}]'
+      INTERVAL_SEC: "5"
+      SIM_SCENARIO: "${SIM_SCENARIO:-mixed}"
+      SIM_DEVICES_JSON: '[{"device_id":"pb-python","floor":"PB","tenant":"python","meter_role":"submeter"},{"device_id":"floor1-python","floor":"P1","tenant":"python","meter_role":"submeter"},{"device_id":"floor3-python","floor":"P3","tenant":"python","meter_role":"submeter"}]'
     command: ["python", "app/workers/sim_flow_sensors.py"]
     restart: unless-stopped
 

@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+﻿from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -37,3 +37,7 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role_id != settings.admin_role_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin.")
     return current_user
+
+
+
+

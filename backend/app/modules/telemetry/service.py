@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+﻿from datetime import datetime, timedelta
 import math
 import random
 
@@ -52,6 +52,7 @@ def query_flux(flux: str) -> list[TelemetryPoint]:
                     site=values.get("site"),
                     floor=values.get("floor"),
                     tenant=values.get("tenant"),
+                    source="real",
                     field=record.get_field(),
                     value=float(record.get_value()),
                 )
@@ -96,6 +97,7 @@ def demo_telemetry(
                     site="Edificio Corporativo Sofia",
                     floor=floor,
                     tenant="wokwi" if demo_device_id == "pb-wokwi" else "python",
+                    source="demo",
                     field=field or "flow_lpm",
                     value=max(0, round(value, 3)),
                 )
@@ -150,3 +152,7 @@ from(bucket: "{flux_string(settings.influx_bucket)}")
     points = query_flux(flux)
     demo_points = demo_telemetry(device_id=device_id, field=field, limit=limit)
     return points or list(reversed(demo_points))
+
+
+
+

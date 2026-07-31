@@ -1,4 +1,4 @@
-import os
+﻿import os
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
@@ -70,3 +70,7 @@ def validate_config(cfg: AppConfig) -> None:
         raise SystemExit("Falta INFLUX_ORG")
     if cfg.mqtt.qos not in (0, 1, 2):
         raise SystemExit("MQTT_QOS debe ser 0, 1 o 2")
+
+
+
+

@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +29,12 @@ class AlertOut(AlertBase):
     detected_at: datetime | None = None
     attended_by: int | None = None
     attended_at: datetime | None = None
+    observed_value: float | None = None
+    last_detected_at: datetime | None = None
 
     class Config:
         from_attributes = True
+
+
+
+

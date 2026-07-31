@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+﻿from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_admin
@@ -45,3 +45,7 @@ def update_role(role_id: int, data: RoleUpdate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(role)
     return role
+
+
+
+

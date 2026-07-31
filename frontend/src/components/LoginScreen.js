@@ -1,4 +1,8 @@
-export function LoginScreen({ onLogin, loading, error }) {
+export function LoginScreen({
+  onLogin,
+  loading,
+  error,
+}) {
   return (
     <main className="login-screen">
       <form className="login-card" onSubmit={onLogin}>
@@ -11,7 +15,7 @@ export function LoginScreen({ onLogin, loading, error }) {
           Correo electronico
           <div className="input-shell">
             <span className="material-symbols-outlined" aria-hidden="true">mail</span>
-            <input name="email" type="email" placeholder="usuario@sofia.com" required />
+            <input name="email" type="email" placeholder="usuario@correo.com" required />
           </div>
         </label>
         <label>
@@ -22,7 +26,7 @@ export function LoginScreen({ onLogin, loading, error }) {
           </div>
         </label>
         {error && <div className="form-error">{error}</div>}
-        <button type="submit" disabled={loading}>{loading ? 'Conectando...' : 'Iniciar sesion'}</button>
+        <button type="submit" disabled={loading}>{loading ? 'Validando...' : 'Iniciar sesion'}</button>
       </form>
     </main>
   );

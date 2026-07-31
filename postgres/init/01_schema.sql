@@ -65,6 +65,30 @@ CREATE INDEX IF NOT EXISTS ix_ml_analysis_alert_id ON ml_analysis(alert_id);
 CREATE INDEX IF NOT EXISTS ix_ml_analysis_device_id ON ml_analysis(device_id);
 CREATE INDEX IF NOT EXISTS ix_ml_analysis_floor ON ml_analysis(floor);
 
+CREATE TABLE IF NOT EXISTS ml_alert_feedback (
+    id SERIAL PRIMARY KEY,
+    alert_id INTEGER REFERENCES alerts(id),
+    sensor_id VARCHAR(80) NOT NULL,
+    model_version VARCHAR(120),
+    feature_schema_version VARCHAR(40) NOT NULL,
+    prediction_score DOUBLE PRECISION NOT NULL,
+    decision_threshold DOUBLE PRECISION NOT NULL,
+    predicted_anomaly BOOLEAN NOT NULL,
+    operator_label VARCHAR(40) NOT NULL,
+    operator_event_type VARCHAR(80),
+    feedback_status VARCHAR(40) NOT NULL DEFAULT 'pending',
+    notes TEXT,
+    reviewed_by INTEGER,
+    reviewed_at TIMESTAMP,
+    window_start TIMESTAMP NOT NULL,
+    window_end TIMESTAMP NOT NULL,
+    source_data_hash VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_ml_alert_feedback_alert_id ON ml_alert_feedback(alert_id);
+CREATE INDEX IF NOT EXISTS ix_ml_alert_feedback_sensor_id ON ml_alert_feedback(sensor_id);
+
 INSERT INTO roles (id, name) VALUES
     (1, 'Supervisor'),
     (2, 'Tecnico'),

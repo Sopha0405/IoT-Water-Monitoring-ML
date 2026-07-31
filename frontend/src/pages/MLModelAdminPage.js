@@ -143,6 +143,8 @@ export function MLModelAdminPage({ token }) {
 
   const active = status?.active;
   const candidate = status?.candidate;
+  const summaryModel = candidate?.exists ? candidate : active;
+  const summaryLabel = candidate?.exists ? 'candidato' : 'activo';
   const activeBadge = badgeFor(active, 'Sin activo');
   const candidateBadge = badgeFor(candidate, 'Sin candidato');
   const jobs = status?.retraining_jobs || [];
@@ -167,10 +169,10 @@ export function MLModelAdminPage({ token }) {
       {message && <div className="status-banner success">{message}</div>}
 
       <section className="metrics-grid">
-        <MetricCard label="Precision candidato" value={formatPercent(candidate?.metrics?.precision)} tone="blue" />
-        <MetricCard label="Recall candidato" value={formatPercent(candidate?.metrics?.recall)} tone="ok" />
-        <MetricCard label="F1 candidato" value={formatPercent(candidate?.metrics?.f1)} tone="ok" />
-        <MetricCard label="FPR candidato" value={formatPercent(candidate?.metrics?.fpr)} tone="warning" />
+        <MetricCard label={`Precision ${summaryLabel}`} value={formatPercent(summaryModel?.metrics?.precision)} tone="blue" />
+        <MetricCard label={`Recall ${summaryLabel}`} value={formatPercent(summaryModel?.metrics?.recall)} tone="ok" />
+        <MetricCard label={`F1 ${summaryLabel}`} value={formatPercent(summaryModel?.metrics?.f1)} tone="ok" />
+        <MetricCard label={`FPR ${summaryLabel}`} value={formatPercent(summaryModel?.metrics?.fpr)} tone="warning" />
       </section>
 
       <section className="model-grid">

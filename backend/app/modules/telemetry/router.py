@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+﻿from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import get_current_user
 from app.modules.telemetry.schemas import TelemetryPoint
@@ -29,3 +29,7 @@ def telemetry_series(
     current_user: User = Depends(get_current_user),
 ):
     return get_telemetry_series(device_id=device_id, field=field, hours=hours, limit=limit)
+
+
+
+

@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -20,3 +20,7 @@ class Alert(Base):
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now(), nullable=False)
     attended_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     attended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+
+
+

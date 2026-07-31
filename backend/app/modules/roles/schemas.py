@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+﻿from pydantic import BaseModel, Field
 
 
 class RoleBase(BaseModel):
@@ -18,3 +18,7 @@ class RoleOut(RoleBase):
 
     class Config:
         from_attributes = True
+
+
+
+

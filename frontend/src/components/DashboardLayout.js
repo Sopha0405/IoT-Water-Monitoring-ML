@@ -19,7 +19,7 @@ export function DashboardLayout({ active, setActive, role, user, onLogout, child
           <div className="brand-mark small">A</div>
           <div>
             <strong>AquaSense</strong>
-            <span>Edificio Sofia</span>
+            <span>{user?.floor ? `Piso ${user.floor}` : 'Monitoreo operativo'}</span>
             <em>{role === 'admin' ? 'Administrador' : role === 'tecnico' ? 'Tecnico' : 'Supervisor'}</em>
           </div>
         </div>

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
 
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -33,3 +33,6 @@ def decode_token(token: str) -> Dict[str, Any]:
         )
     except JWTError:
         raise Exception("Invalid token")
+
+
+

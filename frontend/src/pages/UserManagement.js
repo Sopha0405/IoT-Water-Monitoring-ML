@@ -198,6 +198,7 @@ export function UserManagement({ token, currentUser }) {
           <label>Telefono<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
           <label>Piso<select value={form.floor} onChange={(event) => setForm({ ...form, floor: event.target.value })}>{floors.filter((item) => item !== 'Todos').map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Rol<select value={form.role_id} onChange={(event) => setForm({ ...form, role_id: event.target.value })}><option value="1">Supervisor</option><option value="2">Tecnico</option><option value="3">Administrador</option></select></label>
+          <label>Estado<select value={form.is_active ? 'true' : 'false'} onChange={(event) => setForm({ ...form, is_active: event.target.value === 'true' })}><option value="true">Activo</option><option value="false">Inactivo</option></select></label>
         </div>
         </ActionPopcard>
       )}
@@ -205,10 +206,10 @@ export function UserManagement({ token, currentUser }) {
       {message && <div className="form-error page-error">{message}</div>}
 
       <section className="metrics-grid">
-        <MetricCard label="Total de usuarios" value={users.length} />
-        <MetricCard label="Administradores" value={users.filter((user) => user.role_id === 3).length} tone="blue" />
-        <MetricCard label="Usuarios estandar" value={users.filter((user) => user.role_id !== 3).length} tone="ok" />
-        <MetricCard label="Resultados filtrados" value={filtered.length} />
+        <MetricCard icon="group" label="Total de usuarios" value={users.length} />
+        <MetricCard icon="admin_panel_settings" label="Administradores" value={users.filter((user) => user.role_id === 3).length} tone="blue" />
+        <MetricCard icon="verified_user" label="Activos" value={users.filter((user) => user.is_active).length} tone="ok" />
+        <MetricCard icon="filter_alt" label="Resultados filtrados" value={filtered.length} />
       </section>
 
       <section className="panel table-panel">
@@ -217,9 +218,9 @@ export function UserManagement({ token, currentUser }) {
           <thead>
             <tr>
               <th>Nombre</th>
-              <th>Empresa</th>
               <th>Piso</th>
               <th>Rol</th>
+              <th>Estado</th>
               <th>Contacto</th>
               <th>Acciones</th>
             </tr>
@@ -228,9 +229,9 @@ export function UserManagement({ token, currentUser }) {
             {filtered.map((user) => (
               <tr key={user.id}>
                 <td><strong>{user.name}</strong><span>{user.email}</span></td>
-                <td>Sofia</td>
                 <td>{user.floor || 'Todos'}</td>
                 <td><Pill tone={user.role_id === 3 ? 'info' : 'neutral'}>{roleNames[user.role_id] || `Rol ${user.role_id}`}</Pill></td>
+                <td><Pill tone={user.is_active ? 'success' : 'warning'}>{user.is_active ? 'Activo' : 'Inactivo'}</Pill></td>
                 <td>{user.phone || '-'}</td>
                 <td className="actions">
                   <button onClick={() => startEditUser(user)} disabled={loading}>Editar</button>

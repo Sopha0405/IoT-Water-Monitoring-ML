@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,3 +17,7 @@ class Device(Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="active")
     last_calibration: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=False), server_default=func.now(), nullable=False)
+
+
+
+

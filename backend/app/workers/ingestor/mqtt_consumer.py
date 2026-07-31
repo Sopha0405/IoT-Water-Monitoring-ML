@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import json
 from typing import Callable, Dict, Any
 
@@ -35,7 +35,11 @@ class MqttConsumer:
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
         except Exception as e:
-            print(f"[ERR][MQTT] JSON inválido topic={msg.topic} err={e}")
+            print(f"[ERR][MQTT] JSON invÃ¡lido topic={msg.topic} err={e}")
             return
 
         self._on_payload(msg.topic, payload)
+
+
+
+

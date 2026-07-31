@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from sqlalchemy import text
 
@@ -9,7 +9,8 @@ from app.db.postgres import Base, engine
 # Import models so SQLAlchemy registers them before create_all.
 from app.modules.alerts.model import Alert  # noqa: F401
 from app.modules.devices.model import Device  # noqa: F401
-from app.modules.ml_analysis.model import MLAnalysis  # noqa: F401
+from app.modules.ml_analysis.inference.model import MLAnalysis  # noqa: F401
+from app.modules.ml_analysis.feedback.model import MLAlertFeedback  # noqa: F401
 from app.modules.roles.model import Role
 from app.modules.users.model import User
 
@@ -22,6 +23,7 @@ def init_db() -> None:
     db = SessionLocal()
     try:
         _ensure_ml_analysis_columns(db)
+        _ensure_ml_feedback_table(db)
         default_roles = {
             1: "Supervisor",
             2: "Tecnico",
@@ -45,6 +47,13 @@ def init_db() -> None:
                     is_active=True,
                 )
             )
+        else:
+            admin.name = settings.initial_admin_name
+            admin.password = hash_password(settings.initial_admin_password)
+            admin.floor = settings.initial_admin_floor
+            admin.role_id = settings.admin_role_id
+            admin.is_active = True
+
         demo_users = [
             ("Admin Sistema", "admin@corp.com", "admin123", "+591 7000-0001", "PB", 3),
             ("Ana Martinez", "ana@corp.com", "ana12345", "+591 7234-5678", "P1", 1),
@@ -66,6 +75,13 @@ def init_db() -> None:
                         is_active=True,
                     )
                 )
+            else:
+                exists.name = name
+                exists.password = hash_password(password)
+                exists.phone = phone
+                exists.floor = floor
+                exists.role_id = role_id
+                exists.is_active = True
 
         demo_devices = [
             ("pb-wokwi", "PB", "Medidor Wokwi - Planta Baja", "active", datetime(2026, 5, 29)),
@@ -129,3 +145,39 @@ def _ensure_ml_analysis_columns(db) -> None:
     for statement in statements:
         db.execute(text(statement))
     db.commit()
+
+
+def _ensure_ml_feedback_table(db) -> None:
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS ml_alert_feedback (
+            id SERIAL PRIMARY KEY,
+            alert_id INTEGER REFERENCES alerts(id),
+            sensor_id VARCHAR(80) NOT NULL,
+            model_version VARCHAR(120),
+            feature_schema_version VARCHAR(40) NOT NULL,
+            prediction_score DOUBLE PRECISION NOT NULL,
+            decision_threshold DOUBLE PRECISION NOT NULL,
+            predicted_anomaly BOOLEAN NOT NULL,
+            operator_label VARCHAR(40) NOT NULL,
+            operator_event_type VARCHAR(80),
+            feedback_status VARCHAR(40) NOT NULL DEFAULT 'pending',
+            notes TEXT,
+            reviewed_by INTEGER,
+            reviewed_at TIMESTAMP,
+            window_start TIMESTAMP NOT NULL,
+            window_end TIMESTAMP NOT NULL,
+            source_data_hash VARCHAR(128) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_ml_alert_feedback_alert_id ON ml_alert_feedback(alert_id)",
+        "CREATE INDEX IF NOT EXISTS ix_ml_alert_feedback_sensor_id ON ml_alert_feedback(sensor_id)",
+    ]
+    for statement in statements:
+        db.execute(text(statement))
+    db.commit()
+
+
+
+

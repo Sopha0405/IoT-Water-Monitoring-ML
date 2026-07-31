@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     influx_org: str = Field("water-monitoring", alias="INFLUX_ORG")
     influx_bucket: str = Field("water-data", alias="INFLUX_BUCKET")
     influx_measurement: str = Field("water_telemetry", alias="INFLUX_MEASUREMENT")
+    site: str = Field("indatta", alias="SITE")
+    mqtt_topic_template: str = Field("water/flow/{site}/{device_id}/telemetry", alias="MQTT_TOPIC_TEMPLATE")
 
     @property
     def cors_origin_list(self) -> list[str]:

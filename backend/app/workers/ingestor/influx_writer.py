@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import threading
 import queue
 import time
@@ -56,8 +56,8 @@ class InfluxWriter:
 
     def enqueue(self, topic: str, payload: Dict[str, Any]) -> bool:
         """
-        Encola sin bloquear. Si está llena, descarta el más viejo y reintenta.
-        Devuelve True si se encoló.
+        Encola sin bloquear. Si estÃ¡ llena, descarta el mÃ¡s viejo y reintenta.
+        Devuelve True si se encolÃ³.
         """
         try:
             self._q.put_nowait((topic, payload))
@@ -94,3 +94,7 @@ class InfluxWriter:
                 self._q.task_done()
 
         print("[WRITER] stopped")
+
+
+
+

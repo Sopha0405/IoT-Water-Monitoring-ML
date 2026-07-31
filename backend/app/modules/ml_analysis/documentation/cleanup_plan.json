@@ -1,0 +1,81 @@
+{
+  "objetivo": "consolidacion_y_reorganizacion_del_pipeline_ml_oficial",
+  "cantidad_features": 24,
+  "version_pipeline": "1.0.0",
+  "version_schema_features": "water-flow-24f-1",
+  "decisiones": [
+    {
+      "archivo_actual": "features/extractor.py",
+      "equivalente_anterior": "features.py de esquema heredado",
+      "referencias": "gold, entrenamiento, evaluacion, streaming y pruebas",
+      "decision": "conservar como extractor oficial"
+    },
+    {
+      "archivo_actual": "training/trainer.py",
+      "equivalente_anterior": "train.py previo",
+      "referencias": "cli y pruebas",
+      "decision": "conservar como entrenador oficial"
+    },
+    {
+      "archivo_actual": "training/evaluator.py",
+      "equivalente_anterior": "evaluadores experimentales",
+      "referencias": "cli y pruebas",
+      "decision": "conservar como evaluador oficial de prueba"
+    },
+    {
+      "archivo_actual": "training/promotion.py",
+      "equivalente_anterior": "promocion mezclada con gestion de modelo",
+      "referencias": "cli y pruebas",
+      "decision": "conservar como promocion manual con reporte de prueba"
+    },
+    {
+      "archivo_actual": "inference/model_artifact.py",
+      "equivalente_anterior": "formato heredado de Isolation Forest",
+      "referencias": "ejecucion y pruebas",
+      "decision": "conservar como envoltorio oficial de artefacto"
+    },
+    {
+      "archivo_actual": "alerts/policy.py",
+      "equivalente_anterior": null,
+      "referencias": "worker y pruebas",
+      "decision": "conservar como politica temporal de alertas"
+    },
+    {
+      "archivo_actual": "envoltorios de raiz",
+      "equivalente_anterior": "compatibilidad temporal",
+      "referencias": "sin referencias reales despues de migracion",
+      "decision": "eliminados"
+    }
+  ],
+  "reorganizacion": {
+    "api": ["router.py", "schemas.py"],
+    "data": ["io.py", "audit.py", "preparation.py", "gold.py", "split.py", "common.py"],
+    "features": ["constants.py", "extractor.py", "temporal.py", "references.py"],
+    "training": ["trainer.py", "threshold_optimizer.py", "evaluator.py", "promotion.py", "retraining.py"],
+    "inference": ["model.py", "model_artifact.py", "isolation_forest.py", "service.py"],
+    "streaming": ["types.py", "buffer.py", "validator.py", "window_manager.py", "temporal_state.py"],
+    "alerts": ["policy.py"],
+    "feedback": ["model.py", "schemas.py", "service.py", "router.py", "exporter.py"],
+    "cli": ["audit_dataset.py", "prepare_dataset.py", "build_gold.py", "temporal_split.py", "train.py", "evaluate_test.py", "promote_model.py", "export_feedback.py", "retrain_from_feedback.py"]
+  },
+  "documentacion": {
+    "idioma": "es",
+    "documentos": [
+      "ARCHITECTURE.md",
+      "DEPENDENCY_RULES.md",
+      "README_ML_DOCKER.md",
+      "METODOLOGIA_MODELO.md",
+      "MIGRATION_REPORT.md",
+      "CLEANUP_REPORT.md"
+    ],
+    "cubre": [
+      "ciclo_de_vida_completo",
+      "comandos_docker",
+      "metodologia_del_modelo",
+      "features_oficiales",
+      "entrenamiento_validacion_prueba",
+      "promocion_manual",
+      "streaming_alertas_feedback"
+    ]
+  }
+}
