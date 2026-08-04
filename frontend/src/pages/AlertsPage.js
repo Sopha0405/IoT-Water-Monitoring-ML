@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ActionPopcard } from '../components/ActionPopcard';
+import { BarChart } from '../components/BarChart';
+import { DonutChart } from '../components/DonutChart';
 import { MetricCard } from '../components/MetricCard';
 import { Pill } from '../components/Pill';
 import {
@@ -133,7 +135,7 @@ export function AlertsPage({ token }) {
     try {
       setAlerts(await getAlerts(token));
     } catch (err) {
-      setMessage(err.message);
+      setMessage(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -169,7 +171,7 @@ export function AlertsPage({ token }) {
       setMessage('Estado y comentarios guardados.');
     } catch (err) {
       setAlerts(previousAlerts);
-      setMessage(`No se pudo guardar la alerta: ${err.message}`);
+      setMessage(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -187,12 +189,37 @@ export function AlertsPage({ token }) {
   const falseCount = alerts.filter((alert) => alert.status === 'false_positive').length;
   const maxScore = alerts.reduce((max, alert) => Math.max(max, scorePercent(alert) || 0), 0);
 
+  const alertsByFloor = useMemo(() => {
+    const counts = alerts.reduce((acc, alert) => {
+      const key = normalizeFloor(alert.floor) || 'Sin piso';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts)
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [alerts]);
+
+  const alertsByStatus = useMemo(() => {
+    const palette = ['#0b5d86', '#f5a623', '#2e9d72', '#76b4d2', '#d64545', '#98a2b3'];
+    const counts = alerts.reduce((acc, alert) => {
+      const key = alert.status || 'sin_estado';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts).map(([status, value], index) => ({
+      label: statusLabels[status] || status,
+      value,
+      color: palette[index % palette.length],
+    }));
+  }, [alerts]);
+
   return (
     <>
       <header className="page-header">
         <div>
           <h1>Alertas</h1>
-          <p>Eventos operativos confirmados por telemetria continua y guardados en la base de datos.</p>
+          <p>Alertas registradas por el sistema de monitoreo, priorizadas por criticidad.</p>
         </div>
         <div className="header-actions">
           <button className="secondary-action" onClick={loadData} disabled={loading}>
@@ -208,6 +235,31 @@ export function AlertsPage({ token }) {
         <MetricCard label="Fugas confirmadas" value={leakCount} tone="critical" />
         <MetricCard label="Falsas alertas" value={falseCount} tone="warning" />
         <MetricCard label="Confiabilidad maxima" value={`${maxScore.toFixed(0)} %`} tone={maxScore > 80 ? 'critical' : 'warning'} />
+      </section>
+
+      <section className="charts-grid">
+        <article className="panel chart-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Alertas por piso</h2>
+              <p>Cantidad de alertas registradas segun la ubicacion del sensor.</p>
+            </div>
+          </div>
+          <div className="chart-card-wrap">
+            <BarChart data={alertsByFloor} color="var(--blue)" />
+          </div>
+        </article>
+        <article className="panel chart-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Alertas por estado</h2>
+              <p>Distribucion del ciclo de vida de las alertas registradas.</p>
+            </div>
+          </div>
+          <div className="chart-card-wrap">
+            <DonutChart data={alertsByStatus} centerLabel="Alertas" centerValue={alerts.length} />
+          </div>
+        </article>
       </section>
 
       <section className="toolbar compact">
@@ -273,7 +325,7 @@ export function AlertsPage({ token }) {
             })}
             {!filtered.length && (
               <tr>
-                <td colSpan="11">No hay alertas para mostrar.</td>
+                <td colSpan="11">No se encontraron registros para el periodo seleccionado.</td>
               </tr>
             )}
           </tbody>

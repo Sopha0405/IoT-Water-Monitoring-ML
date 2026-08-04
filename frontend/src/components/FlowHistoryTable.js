@@ -46,7 +46,7 @@ export function FlowHistoryTable({ floor, rows }) {
           ))}
           {!rows.length && (
             <tr>
-              <td colSpan="5">Sin datos de InfluxDB para este filtro.</td>
+              <td colSpan="5">No se encontraron registros para el periodo seleccionado.</td>
             </tr>
           )}
         </tbody>

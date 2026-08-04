@@ -9,9 +9,9 @@ export function AnomalyScoreChart({ analyses }) {
   const toY = (score) => pad.top + plotHeight - (Number(score || 0) / 100) * plotHeight;
   const line = values.map((item, index) => `${toX(index)},${toY(item.anomaly_score)}`).join(' ');
   function pointClass(score) {
-    if (score >= 85) return '#ff2d4e';
-    if (score >= 50) return '#ffb020';
-    return '#55b6c4';
+    if (score >= 85) return '#d64545';
+    if (score >= 50) return '#f5a623';
+    return '#0b5d86';
   }
 
   return (

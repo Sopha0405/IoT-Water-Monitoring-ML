@@ -1,3 +1,5 @@
+import { Logo } from './Logo';
+
 export function LoginScreen({
   onLogin,
   loading,
@@ -6,11 +8,10 @@ export function LoginScreen({
   return (
     <main className="login-screen">
       <form className="login-card" onSubmit={onLogin}>
-        <div className="brand-mark">
-          <span className="material-symbols-outlined" aria-hidden="true">water_drop</span>
+        <div className="login-brand">
+          <Logo size={30} />
         </div>
-        <h1>AquaSense</h1>
-        <p>Monitoreo hidrico</p>
+        <p className="login-tagline">Monitoreo hidrico inteligente</p>
         <label>
           Correo electronico
           <div className="input-shell">

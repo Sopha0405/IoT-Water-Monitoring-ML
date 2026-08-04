@@ -2,7 +2,7 @@ const REALTIME_WINDOW_MS = 5 * 60 * 1000;
 const LIVE_REFRESH_MS = 5000;
 const MAX_POINTS_PER_SENSOR = 720;
 
-const SENSOR_COLORS = ['#55b6c4', '#00d49b', '#3f8fdd', '#ff9f38', '#b08cff', '#ff6384'];
+const SENSOR_COLORS = ['#0b5d86', '#f5a623', '#2e9d72', '#76b4d2', '#98a2b3', '#d64545'];
 
 function niceStep(rawStep) {
   const power = 10 ** Math.floor(Math.log10(rawStep || 1));

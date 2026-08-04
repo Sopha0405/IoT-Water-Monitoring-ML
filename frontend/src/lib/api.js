@@ -12,7 +12,7 @@ function formatApiError(data, fallback) {
   return detail.message || JSON.stringify(detail);
 }
 
-export async function apiRequest(path, { token, method = 'GET', body } = {}) {
+export async function apiRequest(path, { token, method = 'GET', body, signal } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -20,6 +20,7 @@ export async function apiRequest(path, { token, method = 'GET', body } = {}) {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   if (!response.ok) {

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { DashboardLayout } from './components/DashboardLayout';
 import { LoginScreen } from './components/LoginScreen';
+import { useTheme } from './hooks/useTheme';
 import { apiRequest } from './lib/api';
 import { ControlPanel } from './pages/ControlPanel';
 import { AlertsPage } from './pages/AlertsPage';
@@ -23,6 +24,7 @@ const pathToSection = {
 const sectionToPath = Object.fromEntries(Object.entries(pathToSection).map(([path, section]) => [section, path]));
 
 function App() {
+  const { theme, toggleTheme } = useTheme();
   const [token, setToken] = useState(() => localStorage.getItem('water_token') || '');
   const [currentUser, setCurrentUser] = useState(null);
   const [active, setActive] = useState(() => pathToSection[window.location.pathname] || 'dashboard');
@@ -113,6 +115,8 @@ function App() {
       role={role}
       user={currentUser}
       onLogout={logout}
+      theme={theme}
+      onToggleTheme={toggleTheme}
     >
       {active === 'dashboard' && <ControlPanel token={token} />}
       {active === 'users' && <UserManagement token={token} currentUser={currentUser} />}

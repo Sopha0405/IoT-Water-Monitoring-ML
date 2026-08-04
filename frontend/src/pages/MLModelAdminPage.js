@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { ActionPopcard } from '../components/ActionPopcard';
 import { MetricCard } from '../components/MetricCard';
+import { ModelComparisonChart } from '../components/ModelComparisonChart';
 import { Pill } from '../components/Pill';
 import {
   getModelAdminStatus,
@@ -14,6 +15,12 @@ import {
 } from '../services/mlAdminService';
 
 const metricKeys = ['precision', 'recall', 'f1', 'fpr'];
+const metricLabels = {
+  precision: 'Precision',
+  recall: 'Recall',
+  f1: 'F1-score',
+  fpr: 'Tasa de falsas alertas',
+};
 const laPazFormatter = new Intl.DateTimeFormat('es-BO', {
   timeZone: 'America/La_Paz',
   year: 'numeric',
@@ -64,7 +71,7 @@ function badgeFor(model, emptyLabel) {
 function MetricRow({ metrics }) {
   return metricKeys.map((key) => (
     <Fragment key={key}>
-      <dt>{key.toUpperCase()}</dt>
+      <dt>{metricLabels[key]}</dt>
       <dd>{formatPercent(metrics?.[key])}</dd>
     </Fragment>
   ));
@@ -94,7 +101,7 @@ export function MLModelAdminPage({ token }) {
       setStatus(adminStatus);
       setHistory(Array.isArray(modelHistory) ? modelHistory : []);
     } catch (err) {
-      setError(err.message);
+      setError(`No fue posible completar la operacion: ${err.message}`);
       setStatus(null);
     } finally {
       setLoading(false);
@@ -114,7 +121,7 @@ export function MLModelAdminPage({ token }) {
       setMessage(`Dataset preparado. Trabajo ${job.jobId}.`);
       await loadData();
     } catch (err) {
-      setError(err.message);
+      setError(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -135,7 +142,7 @@ export function MLModelAdminPage({ token }) {
       await loadData();
       setMessage('Operacion enviada al backend.');
     } catch (err) {
-      setError(err.message);
+      setError(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -153,14 +160,14 @@ export function MLModelAdminPage({ token }) {
     <>
       <header className="page-header">
         <div>
-          <h1>Administracion del modelo ML</h1>
-          <p>Gestion manual del artefacto activo, candidato, historial y trabajos de reentrenamiento.</p>
+          <h1>Gestion del modelo</h1>
+          <p>Rendimiento del modelo activo, candidato en evaluacion e historial de reentrenamientos.</p>
         </div>
         <div className="header-actions">
           <button className="secondary-action" onClick={loadData} disabled={loading}>
             {loading ? 'Actualizando...' : 'Actualizar'}
           </button>
-          <button className="primary-action" onClick={prepareDataset} disabled={loading}>Preparar dataset</button>
+          <button className="accent-action" onClick={prepareDataset} disabled={loading}>Preparar dataset</button>
         </div>
       </header>
 
@@ -169,10 +176,24 @@ export function MLModelAdminPage({ token }) {
       {message && <div className="status-banner success">{message}</div>}
 
       <section className="metrics-grid">
-        <MetricCard label={`Precision ${summaryLabel}`} value={formatPercent(summaryModel?.metrics?.precision)} tone="blue" />
-        <MetricCard label={`Recall ${summaryLabel}`} value={formatPercent(summaryModel?.metrics?.recall)} tone="ok" />
-        <MetricCard label={`F1 ${summaryLabel}`} value={formatPercent(summaryModel?.metrics?.f1)} tone="ok" />
-        <MetricCard label={`FPR ${summaryLabel}`} value={formatPercent(summaryModel?.metrics?.fpr)} tone="warning" />
+        <MetricCard label={`Precision (${summaryLabel})`} value={formatPercent(summaryModel?.metrics?.precision)} tone="blue" />
+        <MetricCard label={`Recall (${summaryLabel})`} value={formatPercent(summaryModel?.metrics?.recall)} tone="ok" />
+        <MetricCard label={`F1-score (${summaryLabel})`} value={formatPercent(summaryModel?.metrics?.f1)} tone="ok" />
+        <MetricCard label={`Tasa de falsas alertas (${summaryLabel})`} value={formatPercent(summaryModel?.metrics?.fpr)} tone="warning" />
+      </section>
+
+      <section className="panel chart-panel model-compare-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Modelo activo vs candidato</h2>
+            <p>Comparativa de metricas de desempeno entre el modelo en produccion y el candidato en evaluacion.</p>
+          </div>
+          <div className="model-compare-legend">
+            <span><i className="active-mark" /> Activo</span>
+            <span><i className="candidate-mark" /> Candidato</span>
+          </div>
+        </div>
+        <ModelComparisonChart active={active} candidate={candidate} />
       </section>
 
       <section className="model-grid">
@@ -248,7 +269,7 @@ export function MLModelAdminPage({ token }) {
                 <td>{job.candidateVersion || candidate?.version || '-'}</td>
               </tr>
             ))}
-            {!jobs.length && <tr><td colSpan="8">No hay trabajos registrados.</td></tr>}
+            {!jobs.length && <tr><td colSpan="8">No se encontraron registros para el periodo seleccionado.</td></tr>}
           </tbody>
         </table>
       </section>
@@ -275,16 +296,16 @@ export function MLModelAdminPage({ token }) {
                 <td>{item.reason || '-'}</td>
               </tr>
             ))}
-            {!history.length && <tr><td colSpan="5">No hay historial disponible desde la API.</td></tr>}
+            {!history.length && <tr><td colSpan="5">No se encontraron registros para el periodo seleccionado.</td></tr>}
           </tbody>
         </table>
       </section>
 
       <section className="admin-actions">
-        <button onClick={() => setDialog('train')} disabled={loading || !jobs.length}>Entrenar</button>
-        <button onClick={() => setDialog('promote')} disabled={loading || !status?.can_promote}>Promover candidato</button>
-        <button onClick={() => setDialog('reject')} disabled={loading || !status?.can_reject}>Rechazar candidato</button>
-        <button className="danger-action" onClick={() => setDialog('rollback')} disabled={loading || !status?.can_rollback}>Rollback</button>
+        <button className="secondary-action" onClick={() => setDialog('train')} disabled={loading || !jobs.length}>Iniciar reentrenamiento</button>
+        <button className="primary-action" onClick={() => setDialog('promote')} disabled={loading || !status?.can_promote}>Promover modelo candidato</button>
+        <button className="secondary-action" onClick={() => setDialog('reject')} disabled={loading || !status?.can_reject}>Rechazar candidato</button>
+        <button className="danger-action" onClick={() => setDialog('rollback')} disabled={loading || !status?.can_rollback}>Revertir a version anterior</button>
       </section>
 
       {dialog && (

@@ -38,7 +38,7 @@ export function UserManagement({ token, currentUser }) {
       const data = await apiRequest('/api/v1/users/', { token });
       setUsers(data);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -111,7 +111,7 @@ export function UserManagement({ token, currentUser }) {
       setShowForm(false);
       await loadUsers();
     } catch (err) {
-      setMessage(err.message);
+      setMessage(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -131,7 +131,7 @@ export function UserManagement({ token, currentUser }) {
       setDeleteTarget(null);
       setMessage('Usuario eliminado.');
     } catch (err) {
-      setMessage(err.message);
+      setMessage(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -241,7 +241,7 @@ export function UserManagement({ token, currentUser }) {
             ))}
             {!filtered.length && (
               <tr>
-                <td colSpan="6">No hay usuarios para mostrar.</td>
+                <td colSpan="6">No se encontraron registros para el periodo seleccionado.</td>
               </tr>
             )}
           </tbody>

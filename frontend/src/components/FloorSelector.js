@@ -1,4 +1,6 @@
-export function FloorSelector({ floors, value, onChange }) {
+import { memo } from 'react';
+
+export const FloorSelector = memo(function FloorSelector({ floors, value, onChange }) {
   return (
     <div className="segmented-control" role="tablist" aria-label="Filtrar por piso">
       {floors.map((floor) => (
@@ -13,4 +15,4 @@ export function FloorSelector({ floors, value, onChange }) {
       ))}
     </div>
   );
-}
+});

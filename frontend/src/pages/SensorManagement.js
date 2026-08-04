@@ -67,7 +67,7 @@ export function SensorManagement({ token }) {
       setIotConfig(config);
       setSensors(Array.isArray(activeSensors) ? activeSensors : []);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -123,7 +123,7 @@ export function SensorManagement({ token }) {
       setPopcard(null);
       await loadSensors();
     } catch (err) {
-      setMessage(err.message);
+      setMessage(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -145,7 +145,7 @@ export function SensorManagement({ token }) {
       setPopcard(null);
       await loadSensors();
     } catch (err) {
-      setMessage(err.message);
+      setMessage(`No fue posible completar la operacion: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -155,8 +155,8 @@ export function SensorManagement({ token }) {
     <>
       <header className="page-header">
         <div>
-          <h1>Sensores</h1>
-          <p>Lecturas y estado operativo</p>
+          <h1>Dispositivos</h1>
+          <p>Lecturas y estado operativo de los sensores conectados.</p>
         </div>
         <div className="header-actions">
           <button className="secondary-action" onClick={loadSensors} disabled={loading}>
@@ -219,7 +219,7 @@ export function SensorManagement({ token }) {
             ))}
             {!filtered.length && (
               <tr>
-                <td colSpan="7">No hay sensores para mostrar.</td>
+                <td colSpan="7">No se encontraron registros para el periodo seleccionado.</td>
               </tr>
             )}
           </tbody>

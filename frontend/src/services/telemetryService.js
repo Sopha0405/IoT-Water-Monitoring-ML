@@ -3,7 +3,7 @@ import { apiRequest } from '../lib/api';
 export const TELEMETRY_REFRESH_MS = 5000;
 export const TELEMETRY_HISTORY_LIMIT = 500;
 
-export async function getLatestTelemetry(token, { floor = 'PB', field = 'flow_lpm', limit = TELEMETRY_HISTORY_LIMIT } = {}) {
+export async function getLatestTelemetry(token, { floor = 'PB', field = 'flow_lpm', limit = TELEMETRY_HISTORY_LIMIT, signal } = {}) {
   const params = new URLSearchParams({
     field,
     limit: String(limit),
@@ -11,7 +11,7 @@ export async function getLatestTelemetry(token, { floor = 'PB', field = 'flow_lp
   if (floor && floor !== 'Todos') {
     params.set('floor', floor);
   }
-  return apiRequest(`/api/v1/telemetry/latest?${params.toString()}`, { token });
+  return apiRequest(`/api/v1/telemetry/latest?${params.toString()}`, { token, signal });
 }
 
 export function normalizeTelemetryPoint(point) {
