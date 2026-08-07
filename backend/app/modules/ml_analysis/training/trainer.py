@@ -46,7 +46,18 @@ def train_grid(
     X_val = validation[FEATURE_NAMES].to_numpy(dtype=float)
     y_val = validation["actual_label"].to_numpy(dtype=int)
     if len(np.unique(y_val)) < 2:
-        raise ValueError("Validation debe contener normales y anomalias etiquetadas")
+        if not allow_fallback:
+            raise ValueError("Validation debe contener normales y anomalias etiquetadas")
+        return _train_unsupervised_candidate(
+            train_clean=train_clean,
+            validation=validation,
+            x_train=X_train,
+            x_val=X_val,
+            output_path=output_path,
+            report_path=report_path,
+            train_path=train_path,
+            validation_path=validation_path,
+        )
 
     grid = list(itertools.product([100, 200, 300, 500], [0.01, 0.02, 0.03, 0.04, 0.05], ["auto", 0.70, 0.90], [0.70, 0.85, 1.00]))
     if max_candidates is not None:
@@ -167,6 +178,105 @@ def _mean_recall(values: dict[str, float]) -> float:
 
 def _complexity(params: dict[str, Any]) -> float:
     return float(params["n_estimators"])
+
+
+def _train_unsupervised_candidate(
+    *,
+    train_clean: pd.DataFrame,
+    validation: pd.DataFrame,
+    x_train: np.ndarray,
+    x_val: np.ndarray,
+    output_path: str | Path,
+    report_path: str | Path,
+    train_path: str | Path,
+    validation_path: str | Path,
+) -> dict[str, Any]:
+    scaler = StandardScaler()
+    x_train_scaled = scaler.fit_transform(x_train)
+    params = {
+        "n_estimators": 300,
+        "contamination": 0.02,
+        "max_samples": "auto",
+        "max_features": 1.0,
+        "random_state": 42,
+    }
+    model = IsolationForest(n_jobs=-1, **params)
+    model.fit(x_train_scaled)
+    scores = model.decision_function(scaler.transform(x_val)).astype(float)
+    threshold = float(np.percentile(scores, 2)) if len(scores) else 0.0
+    predicted = scores < threshold if len(scores) else np.asarray([], dtype=bool)
+    normal_count = int(len(predicted))
+    predicted_alerts = int(predicted.sum()) if normal_count else 0
+    normal_acceptance_rate = float(1.0 - predicted.mean()) if normal_count else None
+    predicted_alert_rate = float(predicted.mean()) if normal_count else None
+    metrics = {
+        "precision": None,
+        "recall": None,
+        "f1": None,
+        "specificity": normal_acceptance_rate,
+        "fpr": predicted_alert_rate,
+        "normal_acceptance_rate": normal_acceptance_rate,
+        "predicted_alert_rate": predicted_alert_rate,
+        "accepted_windows": int(normal_count - predicted_alerts),
+        "predicted_anomaly_windows": predicted_alerts,
+        "supervised_metrics_available": False,
+        "unavailable_reason": "No existe un conjunto etiquetado suficiente.",
+    }
+    best = {
+        "params": params,
+        "threshold": threshold,
+        "constraints_satisfied": False,
+        "selection_reason": "unsupervised_fallback_no_labeled_validation",
+        "metrics": metrics,
+    }
+    report = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "feature_names": FEATURE_NAMES,
+        "train_path": str(train_path),
+        "validation_path": str(validation_path),
+        "train_sha256": sha256_file(train_path),
+        "validation_sha256": sha256_file(validation_path),
+        "train_hash": stable_frame_hash(train_clean),
+        "validation_hash": stable_frame_hash(validation),
+        "constraints": {"precision": 0.80, "recall": 0.60, "fpr": 0.02},
+        "candidate_count": 1,
+        "candidates": [best],
+        "approved_candidate": best,
+        "output_path": str(output_path),
+        "active_modified": False,
+        "supervised_metrics_available": False,
+    }
+    artifact = {
+        "artifact_version": "1.0.0",
+        "model_type": "IsolationForest",
+        "model": model,
+        "scaler": scaler,
+        "threshold": threshold,
+        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "feature_names": FEATURE_NAMES,
+        "hyperparameters": params,
+        "random_state": 42,
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "dataset_hashes": {
+            "train": report["train_hash"],
+            "validation": report["validation_hash"],
+            "train_file_sha256": report["train_sha256"],
+            "validation_file_sha256": report["validation_sha256"],
+        },
+        "metrics": metrics,
+        "sensors_compatible": sorted(train_clean["sensor_id"].astype(str).unique().tolist()),
+        "exclusions": ["sensor_error", "unknown", "maintenance", "anomalies", "irregular_interval"],
+        "code_version": "ml",
+        "runtime": {"python": platform.python_version(), "sklearn": sklearn.__version__, "numpy": np.__version__},
+    }
+    target = Path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(artifact, target)
+    report["model_saved"] = True
+    report["candidate_sha256"] = sha256_file(target)
+    write_json(report_path, report)
+    return report
 
 
 def main() -> None:

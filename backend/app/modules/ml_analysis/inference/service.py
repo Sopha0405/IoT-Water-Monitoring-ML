@@ -17,6 +17,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.modules.alerts.model import Alert
+from app.modules.devices.registry import ensure_device_registered
 from app.modules.ml_analysis.alerts.policy import microleak_rule
 from app.modules.ml_analysis.features.constants import (
     DEFAULT_TIMEZONE,
@@ -133,14 +134,15 @@ async def persist_inference_result(
     if result.model_version:
         model_label = f"IsolationForest:{result.model_version[:16]}"
 
+    device = ensure_device_registered(db_postgres, result.sensor_id)
     analysis = MLAnalysis(
         alert_id=None,
-        device_id=result.sensor_id,
-        floor=None,
+        device_id=device.id,
         observed_value=result.observed_value,
         model_name=model_label,
+        model_version=result.model_version,
         anomaly_score=result.score,
-        prediction=result.prediction,
+        prediction=result.prediction == "anomaly",
         confidence=result.confidence,
         processed_at=_naive_utc(result.processed_at),
     )
@@ -153,8 +155,8 @@ async def persist_inference_result(
             alert = _find_recent_open_alert(result, db_postgres)
             if alert is None:
                 alert = Alert(
-                    device_id=result.sensor_id,
-                    floor=None,
+                    device_id=device.id,
+                    ml_analysis_id=analysis.id,
                     anomaly_type=result.anomaly_type,
                     severity=result.severity,
                     risk_percentage=result.confidence,
@@ -323,8 +325,8 @@ def _is_operational_alert_confirmed(result: InferenceResponse, db_postgres: Sess
     recent_anomalies = (
         db_postgres.query(MLAnalysis)
         .filter(
-            MLAnalysis.device_id == result.sensor_id,
-            MLAnalysis.prediction == "anomaly",
+            MLAnalysis.device_id == ensure_device_registered(db_postgres, result.sensor_id).id,
+            MLAnalysis.prediction.is_(True),
             MLAnalysis.processed_at >= cutoff,
         )
         .count()
@@ -345,10 +347,11 @@ def _find_recent_open_alert(
 ) -> Alert | None:
     cooldown_minutes = int(os.getenv("ML_ALERT_COOLDOWN_MINUTES", "15"))
     cutoff = _naive_utc(result.processed_at) - timedelta(minutes=cooldown_minutes)
+    device = ensure_device_registered(db_postgres, result.sensor_id)
     return (
         db_postgres.query(Alert)
         .filter(
-            Alert.device_id == result.sensor_id,
+            Alert.device_id == device.id,
             Alert.anomaly_type == result.anomaly_type,
             Alert.status == "pendiente",
             Alert.detected_at >= cutoff,

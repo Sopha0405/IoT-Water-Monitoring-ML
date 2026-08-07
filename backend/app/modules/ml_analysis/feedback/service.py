@@ -6,12 +6,13 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.modules.devices.registry import ensure_device_registered
 from app.modules.ml_analysis.feedback.model import MLAlertFeedback
 from app.modules.ml_analysis.feedback.schemas import FeedbackIn, VALID_FEEDBACK_STATUS, VALID_OPERATOR_LABELS
 
 
 def list_pending_feedback(db: Session) -> list[dict[str, Any]]:
-    rows = db.query(MLAlertFeedback).filter(MLAlertFeedback.feedback_status == "pending").order_by(MLAlertFeedback.created_at.desc()).limit(200).all()
+    rows = db.query(MLAlertFeedback).filter(MLAlertFeedback.feedback_status == "pending").order_by(MLAlertFeedback.reviewed_at.desc()).limit(200).all()
     return [feedback_row(row) for row in rows]
 
 
@@ -23,12 +24,18 @@ def submit_alert_feedback(alert_id: int, payload: FeedbackIn, db: Session) -> di
     existing = (
         db.query(MLAlertFeedback)
         .filter(MLAlertFeedback.alert_id == alert_id)
-        .order_by(MLAlertFeedback.created_at.desc())
+        .order_by(MLAlertFeedback.reviewed_at.desc())
         .first()
     )
     previous_status = existing.feedback_status if existing is not None else None
     transition = f"status:{previous_status or 'new'}->{payload.feedback_status}; reviewer:{payload.reviewed_by}; timestamp:{datetime.utcnow().isoformat()}"
+    device = ensure_device_registered(db, payload.sensor_id)
     data = payload.model_dump()
+    data.pop("sensor_id", None)
+    data.pop("reviewed_by", None)
+    data.pop("source_data_hash", None)
+    data["device_id"] = device.id
+    data["operator_id"] = payload.reviewed_by or 1
     data["notes"] = f"{payload.notes or ''}\n{transition}".strip()
     if existing is not None and existing.feedback_status == "pending":
         row = existing
@@ -69,7 +76,8 @@ def feedback_row(row: MLAlertFeedback) -> dict[str, Any]:
     return {
         "id": row.id,
         "alert_id": row.alert_id,
-        "sensor_id": row.sensor_id,
+        "sensor_id": row.device.device_id if row.device else None,
+        "device_id": row.device_id,
         "model_version": row.model_version,
         "feature_schema_version": row.feature_schema_version,
         "prediction_score": row.prediction_score,
@@ -79,7 +87,7 @@ def feedback_row(row: MLAlertFeedback) -> dict[str, Any]:
         "operator_event_type": row.operator_event_type,
         "feedback_status": row.feedback_status,
         "notes": row.notes,
-        "reviewed_by": row.reviewed_by,
+        "reviewed_by": row.operator_id,
         "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
         "window_start": row.window_start.isoformat(),
         "window_end": row.window_end.isoformat(),

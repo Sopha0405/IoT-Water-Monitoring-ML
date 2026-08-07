@@ -2,6 +2,7 @@
 uvicorn[standard]==0.32.1
 
 SQLAlchemy==2.0.36
+alembic==1.14.0
 psycopg[binary]==3.2.3
 
 python-jose[cryptography]==3.3.0
@@ -22,6 +23,3 @@ joblib==1.4.2
 APScheduler==3.10.4
 pyarrow==17.0.0
 pytest==9.0.3
-
-
-

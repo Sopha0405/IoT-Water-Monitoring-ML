@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     influx_measurement: str = Field("water_telemetry", alias="INFLUX_MEASUREMENT")
     site: str = Field("indatta", alias="SITE")
     mqtt_topic_template: str = Field("water/flow/{site}/{device_id}/telemetry", alias="MQTT_TOPIC_TEMPLATE")
+    whatsapp_2fa_enabled: bool = Field(False, alias="WHATSAPP_2FA_ENABLED")
+    twilio_account_sid: str = Field("", alias="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: str = Field("", alias="TWILIO_AUTH_TOKEN")
+    twilio_whatsapp_from: str = Field("", alias="TWILIO_WHATSAPP_FROM")
 
     @property
     def cors_origin_list(self) -> list[str]:

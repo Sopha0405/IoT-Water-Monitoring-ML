@@ -10,13 +10,13 @@ import {
   submitAlertFeedback,
   updateAlertStatus,
 } from '../services/mlAdminService';
-import { floors, normalizeFloor } from '../lib/constants';
+import { allowedFloorsForUser, normalizeFloor } from '../lib/constants';
 
 const statusLabels = {
   pendiente: 'Pendiente',
   open: 'Activa',
   acknowledged: 'Reconocida',
-  reviewing: 'En revision',
+  reviewing: 'En revisión',
   confirmed_leak: 'Fuga confirmada',
   false_positive: 'Falsa alerta',
   resolved: 'Resuelta',
@@ -28,7 +28,7 @@ const statusLabels = {
 
 const statusOptions = [
   ['acknowledged', 'Reconocer alerta'],
-  ['reviewing', 'Poner en revision'],
+  ['reviewing', 'Poner en revisión'],
   ['confirmed_leak', 'Confirmar fuga'],
   ['false_positive', 'Marcar falsa alerta'],
   ['resolved', 'Resolver'],
@@ -41,7 +41,7 @@ const typeLabels = {
   fuga_sostenida: 'Fuga sostenida',
   flujo_sostenido: 'Flujo sostenido',
   consumo_creciente: 'Consumo creciente',
-  anomalia_no_clasificada: 'Anomalia no clasificada',
+  anomalia_no_clasificada: 'Anomalía no clasificada',
 };
 
 function formatDate(value) {
@@ -118,11 +118,17 @@ function feedbackPayload(alert, status, notes) {
   };
 }
 
-export function AlertsPage({ token }) {
+function compactText(value) {
+  const text = value || 'Generada por el modelo ML streaming.';
+  return text.length > 110 ? `${text.slice(0, 107)}...` : text;
+}
+
+export function AlertsPage({ token, currentUser, historyMode = false }) {
   const [alerts, setAlerts] = useState([]);
   const [status, setStatus] = useState('Todas');
+  const floorOptions = useMemo(() => allowedFloorsForUser(currentUser, currentUser?.role_id === 3), [currentUser]);
   const [floor, setFloor] = useState('Todos');
-  const [criticalOnly, setCriticalOnly] = useState(true);
+  const [criticalOnly, setCriticalOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [target, setTarget] = useState(null);
@@ -133,16 +139,19 @@ export function AlertsPage({ token }) {
     setLoading(true);
     setMessage('');
     try {
-      setAlerts(await getAlerts(token));
+      const params = floor && floor !== 'Todos' ? { floor } : {};
+      setAlerts(await getAlerts(token, params));
     } catch (err) {
-      setMessage(`No fue posible completar la operacion: ${err.message}`);
+      setMessage(`No fue posible completar la operación: ${err.message}`);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, floor]);
 
   useEffect(() => {
     loadData();
+    const timer = window.setInterval(loadData, 12000);
+    return () => window.clearInterval(timer);
   }, [loadData]);
 
   function openStatusEditor(alert, nextStatus = alert.status || 'acknowledged') {
@@ -171,7 +180,7 @@ export function AlertsPage({ token }) {
       setMessage('Estado y comentarios guardados.');
     } catch (err) {
       setAlerts(previousAlerts);
-      setMessage(`No fue posible completar la operacion: ${err.message}`);
+      setMessage(`No fue posible completar la operación: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -179,15 +188,14 @@ export function AlertsPage({ token }) {
 
   const filtered = useMemo(() => alerts.filter((alert) => {
     const matchesStatus = status === 'Todas' || alert.status === status;
-    const matchesFloor = floor === 'Todos' || normalizeFloor(alert.floor) === floor;
     const matchesPriority = !criticalOnly || (scorePercent(alert) || 0) > 80;
-    return matchesStatus && matchesFloor && matchesPriority;
-  }), [alerts, status, floor, criticalOnly]);
+    return matchesStatus && matchesPriority;
+  }), [alerts, status, criticalOnly]);
 
   const activeCount = alerts.filter((alert) => ['pendiente', 'open', 'acknowledged', 'reviewing', 'confirmed_leak'].includes(alert.status)).length;
-  const leakCount = alerts.filter((alert) => alert.status === 'confirmed_leak').length;
-  const falseCount = alerts.filter((alert) => alert.status === 'false_positive').length;
-  const maxScore = alerts.reduce((max, alert) => Math.max(max, scorePercent(alert) || 0), 0);
+  const pendingCount = alerts.filter((alert) => ['pendiente', 'open', 'acknowledged', 'reviewing', 'investigating', 'possible'].includes(alert.status)).length;
+  const resolvedCount = alerts.filter((alert) => ['resolved', 'closed', 'attended', 'false_positive'].includes(alert.status)).length;
+  const criticalCount = alerts.filter((alert) => (scorePercent(alert) || 0) > 80 || ['critical', 'alta', 'high'].includes(String(alert.severity || '').toLowerCase())).length;
 
   const alertsByFloor = useMemo(() => {
     const counts = alerts.reduce((acc, alert) => {
@@ -213,12 +221,11 @@ export function AlertsPage({ token }) {
       color: palette[index % palette.length],
     }));
   }, [alerts]);
-
   return (
     <>
       <header className="page-header">
         <div>
-          <h1>Alertas</h1>
+          <h1>{historyMode ? 'Historial' : 'Alertas'}</h1>
           <p>Alertas registradas por el sistema de monitoreo, priorizadas por criticidad.</p>
         </div>
         <div className="header-actions">
@@ -232,9 +239,9 @@ export function AlertsPage({ token }) {
 
       <section className="metrics-grid">
         <MetricCard label="Alertas activas" value={activeCount} tone="critical" />
-        <MetricCard label="Fugas confirmadas" value={leakCount} tone="critical" />
-        <MetricCard label="Falsas alertas" value={falseCount} tone="warning" />
-        <MetricCard label="Confiabilidad maxima" value={`${maxScore.toFixed(0)} %`} tone={maxScore > 80 ? 'critical' : 'warning'} />
+        <MetricCard label="Pendientes" value={pendingCount} tone="warning" />
+        <MetricCard label="Resueltas" value={resolvedCount} tone="ok" />
+        <MetricCard label="Críticas" value={criticalCount} tone="critical" />
       </section>
 
       <section className="charts-grid">
@@ -242,7 +249,7 @@ export function AlertsPage({ token }) {
           <div className="panel-heading">
             <div>
               <h2>Alertas por piso</h2>
-              <p>Cantidad de alertas registradas segun la ubicacion del sensor.</p>
+              <p>Cantidad de alertas registradas según la ubicación del sensor.</p>
             </div>
           </div>
           <div className="chart-card-wrap">
@@ -253,7 +260,7 @@ export function AlertsPage({ token }) {
           <div className="panel-heading">
             <div>
               <h2>Alertas por estado</h2>
-              <p>Distribucion del ciclo de vida de las alertas registradas.</p>
+              <p>Distribución del ciclo de vida de las alertas registradas.</p>
             </div>
           </div>
           <div className="chart-card-wrap">
@@ -274,13 +281,18 @@ export function AlertsPage({ token }) {
         </label>
         <label>
           Filtrar por piso
-          <select value={floor} onChange={(event) => setFloor(event.target.value)}>
-            {floors.map((item) => <option key={item}>{item}</option>)}
+          <select
+            value={floor}
+            onChange={(event) => {
+              setFloor(event.target.value);
+            }}
+          >
+            {floorOptions.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
         <label className="inline-check">
           <input type="checkbox" checked={criticalOnly} onChange={(event) => setCriticalOnly(event.target.checked)} />
-          Mostrar solo prioridad critica
+          Mostrar solo prioridad crítica
         </label>
       </section>
 
@@ -294,11 +306,10 @@ export function AlertsPage({ token }) {
               <th>Tipo</th>
               <th>Prioridad</th>
               <th>Inicio</th>
-              <th>Ultima deteccion</th>
+              <th>Última detección</th>
               <th>Estado</th>
-              <th>Confiabilidad</th>
               <th>Caudal prom.</th>
-              <th>Origen / observacion</th>
+              <th>Origen / observación</th>
               <th>Acciones</th>
             </tr>
           </thead>
@@ -314,9 +325,8 @@ export function AlertsPage({ token }) {
                   <td>{formatDate(alert.started_at || alert.detected_at)}</td>
                   <td>{formatDate(alert.last_detected_at || alert.detected_at)}</td>
                   <td><Pill tone={statusTone(alert.status)}>{statusLabels[alert.status] || alert.status || '-'}</Pill></td>
-                  <td>{score === null ? '-' : `${score.toFixed(0)} %`}</td>
                   <td>{numberValue(alert.avg_flow, alert.average_flow, alert.observed_value)?.toFixed(2) || '-'}</td>
-                  <td>{alert.observations || alert.description || 'Generada por el modelo ML streaming.'}</td>
+                  <td title={alert.observations || alert.description || ''}>{compactText(alert.observations || alert.description)}</td>
                   <td className="actions">
                     <button onClick={() => openStatusEditor(alert)} disabled={loading}>Gestionar</button>
                   </td>
@@ -325,7 +335,7 @@ export function AlertsPage({ token }) {
             })}
             {!filtered.length && (
               <tr>
-                <td colSpan="11">No se encontraron registros para el periodo seleccionado.</td>
+                <td colSpan="10">No se encontraron registros para el periodo seleccionado.</td>
               </tr>
             )}
           </tbody>

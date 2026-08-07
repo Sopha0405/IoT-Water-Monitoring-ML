@@ -16,10 +16,6 @@ export function getModelComparison(token) {
   return getModelAdminStatus(token);
 }
 
-export function getModelHistory(token) {
-  return apiRequest('/api/v1/admin/ml/retraining/models/history', { token }).catch(() => []);
-}
-
 export function getRetrainingJobs(token) {
   return apiRequest('/api/v1/admin/ml/retraining/jobs', { token }).catch(() => []);
 }
@@ -47,7 +43,7 @@ export function promoteCandidate(token, jobId, reason) {
   return apiRequest('/api/v1/ml-analysis/promote', {
     token,
     method: 'POST',
-    body: { job_id: jobId, reason },
+    body: { job_id: jobId, reason, acknowledgedWarnings: true },
   });
 }
 

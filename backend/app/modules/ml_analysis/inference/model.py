@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import joblib
 from sqlalchemy import DateTime, Float, ForeignKey, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.postgres import Base
 from app.modules.ml_analysis.api.schemas import ModelStatus
@@ -37,22 +37,22 @@ class MLAnalysis(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     alert_id: Mapped[int | None] = mapped_column(
-        ForeignKey("alerts.id"), index=True, nullable=True
+        ForeignKey("alerts.id", use_alter=True), index=True, nullable=True
     )
-    device_id: Mapped[str | None] = mapped_column(
-        String(80), index=True, nullable=True
-    )
-    floor: Mapped[str | None] = mapped_column(
-        String(40), index=True, nullable=True
-    )
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"), index=True, nullable=False)
     observed_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     model_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    model_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     anomaly_score: Mapped[float] = mapped_column(Float, nullable=False)
-    prediction: Mapped[str] = mapped_column(String(120), nullable=False)
-    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    prediction: Mapped[bool] = mapped_column(nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now(), nullable=False
     )
+
+    alert = relationship("Alert", back_populates="ml_analyses", foreign_keys=[alert_id])
+    generated_alert = relationship("Alert", back_populates="ml_analysis", uselist=False, foreign_keys="Alert.ml_analysis_id")
+    device = relationship("Device", back_populates="ml_analyses")
 
 
 class ModelManager:

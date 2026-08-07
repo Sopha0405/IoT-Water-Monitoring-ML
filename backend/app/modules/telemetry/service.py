@@ -16,8 +16,11 @@ def floor_filter_values(value: str) -> list[str]:
     normalized = value.strip()
     aliases = {
         "PB": ["PB"],
+        "P1": ["P1", "1", "Piso 1"],
         "Piso 1": ["P1", "1", "Piso 1"],
+        "P2": ["P2", "2", "Piso 2"],
         "Piso 2": ["P2", "2", "Piso 2"],
+        "P3": ["P3", "3", "Piso 3"],
         "Piso 3": ["P3", "3", "Piso 3"],
     }
     return aliases.get(normalized, [normalized])
@@ -69,6 +72,7 @@ def demo_telemetry(
     devices = [
         ("pb-wokwi", "PB", 6.8),
         ("floor1-python", "P1", 7.5),
+        ("floor2-python", "P2", 8.4),
         ("floor3-python", "P3", 10.5),
     ]
     if device_id:

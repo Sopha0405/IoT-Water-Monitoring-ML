@@ -6,6 +6,19 @@ class LoginIn(BaseModel):
     password: str
 
 
+class LoginChallengeOut(BaseModel):
+    requires_2fa: bool = True
+    challenge_id: str
+    channel: str = "whatsapp"
+    phone_hint: str | None = None
+    expires_in_seconds: int
+
+
+class VerifyTwoFactorIn(BaseModel):
+    challenge_id: str
+    code: str
+
+
 class UserOut(BaseModel):
     id: int
     name: str

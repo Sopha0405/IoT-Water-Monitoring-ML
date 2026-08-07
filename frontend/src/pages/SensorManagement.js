@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActionPopcard } from '../components/ActionPopcard';
 import { MetricCard } from '../components/MetricCard';
 import { Pill } from '../components/Pill';
-import { floors, normalizeFloor, statusClass } from '../lib/constants';
+import { allowedFloorsForUser, hasAdminAccess, normalizeFloor, statusClass } from '../lib/constants';
 import {
   createDevice,
   deleteDevice,
@@ -11,9 +11,10 @@ import {
   getIotConfig,
   updateDevice,
 } from '../services/deviceService';
+import { getFloors } from '../services/floorService';
 
 const statusLabels = {
-  active: 'En Linea',
+  active: 'En línea',
   offline: 'Desconectado',
   maintenance: 'Mantenimiento',
 };
@@ -39,22 +40,26 @@ function formatDate(value) {
   });
 }
 
-export function SensorManagement({ token }) {
+export function SensorManagement({ token, currentUser }) {
   const [sensors, setSensors] = useState([]);
+  const [floorOptions, setFloorOptions] = useState([]);
   const [iotConfig, setIotConfig] = useState(null);
   const [hiddenTelemetryIds, setHiddenTelemetryIds] = useState([]);
   const [query, setQuery] = useState('');
+  const floorFilterOptions = useMemo(() => allowedFloorsForUser(currentUser, currentUser?.role_id === 3), [currentUser]);
   const [floor, setFloor] = useState('Todos');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [popcard, setPopcard] = useState(null);
   const [form, setForm] = useState({
     device_id: '',
+    floor_id: '',
     floor: 'PB',
     location: '',
     sensor_type: 'FS300A',
     status: 'active',
   });
+  const canManageDevices = hasAdminAccess(currentUser);
 
   const loadSensors = useCallback(async () => {
     setLoading(true);
@@ -67,7 +72,7 @@ export function SensorManagement({ token }) {
       setIotConfig(config);
       setSensors(Array.isArray(activeSensors) ? activeSensors : []);
     } catch (err) {
-      setMessage(`No fue posible completar la operacion: ${err.message}`);
+      setMessage(`No fue posible completar la operación: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -77,6 +82,23 @@ export function SensorManagement({ token }) {
     loadSensors();
   }, [loadSensors]);
 
+  const loadFloors = useCallback(async () => {
+    if (!canManageDevices) {
+      setFloorOptions([]);
+      return;
+    }
+    try {
+      const data = await getFloors(token);
+      setFloorOptions(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setMessage(`No fue posible cargar pisos: ${err.message}`);
+    }
+  }, [canManageDevices, token]);
+
+  useEffect(() => {
+    loadFloors();
+  }, [loadFloors]);
+
   const filtered = useMemo(() => sensors.filter((sensor) => {
     if (hiddenTelemetryIds.includes(sensor.device_id)) return false;
     const matchesText = `${sensor.device_id} ${sensor.location || ''}`.toLowerCase().includes(query.toLowerCase());
@@ -85,14 +107,23 @@ export function SensorManagement({ token }) {
   }), [sensors, hiddenTelemetryIds, query, floor]);
 
   function openCreateSensor() {
-    setForm({ device_id: '', floor: 'PB', location: '', sensor_type: 'FS300A', status: 'active' });
+    const firstFloor = floorOptions[0];
+    setForm({
+      device_id: '',
+      floor_id: firstFloor?.id ? String(firstFloor.id) : '',
+      floor: firstFloor?.code || 'PB',
+      location: '',
+      sensor_type: 'FS300A',
+      status: 'active',
+    });
     setPopcard({ type: 'create' });
   }
 
   function openEditSensor(sensor) {
     setForm({
       device_id: sensor.device_id,
-      floor: normalizeFloor(sensor.floor) || 'PB',
+      floor_id: sensor.floor_id ? String(sensor.floor_id) : '',
+      floor: sensor.floor_info?.code || normalizeFloor(sensor.floor) || 'PB',
       location: sensor.location || '',
       sensor_type: sensor.sensor_type || 'FS300A',
       status: sensor.status || 'active',
@@ -110,6 +141,7 @@ export function SensorManagement({ token }) {
     try {
       const body = {
         ...form,
+        floor_id: form.floor_id ? Number(form.floor_id) : null,
         floor: form.floor === 'Todos' ? null : form.floor,
       };
       if (popcard?.type === 'edit' && popcard.sensor.id) {
@@ -118,12 +150,12 @@ export function SensorManagement({ token }) {
       } else {
         await createDevice(token, body);
         setHiddenTelemetryIds((items) => items.filter((item) => item !== form.device_id));
-        setMessage(popcard?.type === 'edit' ? 'Sensor registrado. Aparecera como activo cuando publique telemetria.' : 'Sensor registrado. Aparecera como activo cuando publique telemetria.');
+        setMessage(popcard?.type === 'edit' ? 'Sensor registrado. Aparecerá como activo cuando publique telemetría.' : 'Sensor registrado. Aparecerá como activo cuando publique telemetría.');
       }
       setPopcard(null);
       await loadSensors();
     } catch (err) {
-      setMessage(`No fue posible completar la operacion: ${err.message}`);
+      setMessage(`No fue posible completar la operación: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -145,7 +177,7 @@ export function SensorManagement({ token }) {
       setPopcard(null);
       await loadSensors();
     } catch (err) {
-      setMessage(`No fue posible completar la operacion: ${err.message}`);
+      setMessage(`No fue posible completar la operación: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -162,19 +194,24 @@ export function SensorManagement({ token }) {
           <button className="secondary-action" onClick={loadSensors} disabled={loading}>
             {loading ? 'Actualizando...' : 'Actualizar'}
           </button>
-          <button className="primary-action" onClick={openCreateSensor}>Anadir nuevo sensor</button>
+          {canManageDevices && <button className="primary-action" onClick={openCreateSensor}>Añadir nuevo sensor</button>}
         </div>
       </header>
 
       <section className="toolbar">
         <label>
           Buscar sensor
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID o ubicacion..." />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID o ubicación..." />
         </label>
         <label>
           Filtrar por piso
-          <select value={floor} onChange={(event) => setFloor(event.target.value)}>
-            {floors.map((item) => <option key={item}>{item}</option>)}
+          <select
+            value={floor}
+            onChange={(event) => {
+              setFloor(event.target.value);
+            }}
+          >
+            {floorFilterOptions.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
       </section>
@@ -183,7 +220,6 @@ export function SensorManagement({ token }) {
 
       <section className="metrics-grid">
         <MetricCard icon="sensors" label="Sensores activos" value={sensors.length} />
-        <MetricCard icon="wifi" label="Con telemetria real" value={sensors.filter((sensor) => sensor.source === 'real' || sensor.last_seen).length} tone="ok" />
         <MetricCard icon="inventory_2" label="Registrados" value={sensors.filter((sensor) => sensor.registered).length} tone="blue" />
         <MetricCard icon="schedule" label="Actualizados" value={sensors.filter((sensor) => sensor.last_seen).length} tone="ok" />
       </section>
@@ -194,32 +230,42 @@ export function SensorManagement({ token }) {
           <thead>
             <tr>
               <th>ID Sensor</th>
-              <th>Ubicacion (Piso)</th>
+              <th>Ubicación (Piso)</th>
               <th>Estado</th>
               <th>Origen</th>
               <th>Lectura actual</th>
-              <th>Ultimo dato</th>
-              <th>Acciones</th>
+              <th>Alertas</th>
+              <th>Último dato</th>
+              {canManageDevices && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.map((sensor) => (
-              <tr key={sensor.id}>
+              <tr key={sensor.id || sensor.device_id}>
                 <td><strong>{sensor.device_id}</strong></td>
-                <td><strong>{sensor.location || 'Sin ubicacion registrada'}</strong><span>{normalizeFloor(sensor.floor)} - {sensor.site || 'telemetria'}</span></td>
+                <td>
+                  <strong>{sensor.location || 'Sin ubicación registrada'}</strong>
+                  <span>{sensor.floor_info ? `${sensor.floor_info.code} - ${sensor.floor_info.name}` : 'Sin piso asignado'} - {sensor.site || 'telemetría'}</span>
+                </td>
                 <td><Pill tone={statusClass(displayStatus(sensor.status))}>{displayStatus(sensor.status)}</Pill></td>
                 <td><Pill tone={sensor.registered ? 'success' : 'warning'}>{sensor.registered ? 'Registrado' : 'No registrado'}</Pill></td>
                 <td>{sensor.reading === null ? '-' : <><strong>{Number(sensor.reading || 0).toFixed(2)}</strong> <span>L/min</span></>}</td>
-                <td>{formatDate(sensor.last_seen)}</td>
-                <td className="actions">
-                  <button onClick={() => openEditSensor(sensor)}>Editar</button>
-                  <button className="delete" onClick={() => openDeleteSensor(sensor)}>Eliminar</button>
+                <td>
+                  <strong>{Number(sensor.active_alert_count || 0)}</strong>
+                  <span>activas / {Number(sensor.alert_count || 0)} total</span>
                 </td>
+                <td>{formatDate(sensor.last_seen)}</td>
+                {canManageDevices && (
+                  <td className="actions">
+                    <button onClick={() => openEditSensor(sensor)}>Editar</button>
+                    <button className="delete" onClick={() => openDeleteSensor(sensor)}>Eliminar</button>
+                  </td>
+                )}
               </tr>
             ))}
             {!filtered.length && (
               <tr>
-                <td colSpan="7">No se encontraron registros para el periodo seleccionado.</td>
+                <td colSpan={canManageDevices ? 8 : 7}>No se encontraron registros para el periodo seleccionado.</td>
               </tr>
             )}
           </tbody>
@@ -228,8 +274,8 @@ export function SensorManagement({ token }) {
 
       {(popcard?.type === 'create' || popcard?.type === 'edit') && (
         <ActionPopcard
-          title={popcard.type === 'edit' ? 'Editar sensor' : 'Anadir sensor'}
-          description={popcard.type === 'edit' && !popcard.sensor.id ? 'Este sensor viene de telemetria MQTT. Al guardar, se registrara en el inventario.' : 'Registra el device_id que enviara telemetria MQTT.'}
+          title={popcard.type === 'edit' ? 'Editar sensor' : 'Añadir sensor'}
+          description={popcard.type === 'edit' && !popcard.sensor.id ? 'Este sensor viene de telemetría MQTT. Al guardar, se registrará en el inventario.' : 'Registra el device_id que enviará telemetría MQTT.'}
           confirmLabel={popcard.type === 'edit' ? 'Guardar cambios' : 'Crear sensor'}
           loading={loading}
           onConfirm={saveSensor}
@@ -237,9 +283,21 @@ export function SensorManagement({ token }) {
         >
           <div className="popcard-grid">
             <label>ID Sensor<input value={form.device_id} onChange={(event) => setForm({ ...form, device_id: event.target.value })} disabled={popcard.type === 'edit'} /></label>
-            <label>Ubicacion<input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label>
-            <label>Piso<select value={form.floor} onChange={(event) => setForm({ ...form, floor: event.target.value })}>{floors.filter((item) => item !== 'Todos').map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label>Estado<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="active">En Linea</option><option value="offline">Desconectado</option><option value="maintenance">Mantenimiento</option></select></label>
+            <label>Ubicación<input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label>
+            <label>
+              Piso
+              <select
+                value={form.floor_id}
+                onChange={(event) => {
+                  const selected = floorOptions.find((item) => String(item.id) === event.target.value);
+                  setForm({ ...form, floor_id: event.target.value, floor: selected?.code || form.floor });
+                }}
+              >
+                <option value="">Sin piso asignado</option>
+                {floorOptions.map((item) => <option key={item.id} value={item.id}>{item.code} - {item.name}</option>)}
+              </select>
+            </label>
+            <label>Estado<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="active">En línea</option><option value="offline">Desconectado</option><option value="maintenance">Mantenimiento</option></select></label>
           </div>
           <p className="popcard-note">
             Topic MQTT esperado: {(iotConfig?.topic_template || '').replace('{site}', iotConfig?.site || '').replace('{device_id}', form.device_id || '{device_id}')}
@@ -257,7 +315,7 @@ export function SensorManagement({ token }) {
           onConfirm={deleteSensor}
           onClose={() => setPopcard(null)}
         >
-          <p className="popcard-note">Si el sensor solo existe por telemetria MQTT, se ocultara en esta vista local.</p>
+          <p className="popcard-note">Si el sensor solo existe por telemetría MQTT, se ocultará en esta vista local.</p>
         </ActionPopcard>
       )}
     </>

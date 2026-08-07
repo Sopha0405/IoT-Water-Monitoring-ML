@@ -11,6 +11,7 @@ import { ConfigurationPage } from './pages/ConfigurationPage';
 import { MLModelAdminPage } from './pages/MLModelAdminPage';
 import { SensorManagement } from './pages/SensorManagement';
 import { UserManagement } from './pages/UserManagement';
+import { canAccessSection, hasAdminAccess } from './lib/constants';
 
 const pathToSection = {
   '/': 'dashboard',
@@ -30,6 +31,7 @@ function App() {
   const [active, setActive] = useState(() => pathToSection[window.location.pathname] || 'dashboard');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState(null);
 
   const loadCurrentUser = useCallback(async (nextToken = token) => {
     const user = await apiRequest('/api/v1/users/me', { token: nextToken });
@@ -59,11 +61,13 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  const role = currentUser?.role_id === 3 ? 'admin' : currentUser?.role_id === 2 ? 'tecnico' : 'supervisor';
+
   useEffect(() => {
-    if (currentUser && currentUser.role_id !== 3 && active === 'ml-model') {
+    if (currentUser && !canAccessSection(role, active)) {
       setActive('dashboard');
     }
-  }, [active, currentUser]);
+  }, [active, currentUser, role]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -78,6 +82,10 @@ function App() {
           password: form.get('password'),
         },
       });
+      if (data.requires_2fa) {
+        setTwoFactorChallenge(data);
+        return;
+      }
       localStorage.setItem('water_token', data.access_token);
       setToken(data.access_token);
       setCurrentUser(data.user);
@@ -87,6 +95,37 @@ function App() {
     } finally {
       setLoginLoading(false);
     }
+  }
+
+  async function handleVerifyCode(event) {
+    event.preventDefault();
+    if (!twoFactorChallenge) return;
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      const form = new FormData(event.currentTarget);
+      const data = await apiRequest('/api/v1/auth/verify-2fa', {
+        method: 'POST',
+        body: {
+          challenge_id: twoFactorChallenge.challenge_id,
+          code: form.get('code'),
+        },
+      });
+      localStorage.setItem('water_token', data.access_token);
+      setToken(data.access_token);
+      setCurrentUser(data.user);
+      setTwoFactorChallenge(null);
+      setActive('dashboard');
+    } catch (err) {
+      setLoginError(err.message);
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  function resetTwoFactor() {
+    setTwoFactorChallenge(null);
+    setLoginError('');
   }
 
   function logout() {
@@ -100,13 +139,14 @@ function App() {
     return (
       <LoginScreen
         onLogin={handleLogin}
+        onVerifyCode={handleVerifyCode}
+        onBackToLogin={resetTwoFactor}
         loading={loginLoading}
         error={loginError}
+        challenge={twoFactorChallenge}
       />
     );
   }
-
-  const role = currentUser.role_id === 3 ? 'admin' : currentUser.role_id === 2 ? 'tecnico' : 'supervisor';
 
   return (
     <DashboardLayout
@@ -114,15 +154,16 @@ function App() {
       setActive={setActive}
       role={role}
       user={currentUser}
+      token={token}
       onLogout={logout}
       theme={theme}
       onToggleTheme={toggleTheme}
     >
-      {active === 'dashboard' && <ControlPanel token={token} />}
+      {active === 'dashboard' && <ControlPanel token={token} currentUser={currentUser} />}
       {active === 'users' && <UserManagement token={token} currentUser={currentUser} />}
-      {active === 'sensors' && <SensorManagement token={token} />}
-      {active === 'alerts' && <AlertsPage token={token} />}
-      {active === 'ml-model' && role === 'admin' && <MLModelAdminPage token={token} />}
+      {active === 'sensors' && <SensorManagement token={token} currentUser={currentUser} />}
+      {active === 'alerts' && <AlertsPage token={token} currentUser={currentUser} />}
+      {active === 'ml-model' && hasAdminAccess(currentUser) && <MLModelAdminPage token={token} />}
       {active === 'settings' && <ConfigurationPage />}
     </DashboardLayout>
   );

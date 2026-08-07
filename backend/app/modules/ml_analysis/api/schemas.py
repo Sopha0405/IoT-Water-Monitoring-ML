@@ -103,8 +103,11 @@ class RejectCandidateRequest(BaseModel):
 
 class RetrainingFromInfluxRequest(BaseModel):
     sensorIds: list[str] | None = None
-    periodType: Literal["last_60_days", "last_two_complete_months"] = "last_two_complete_months"
+    periodType: Literal["last_30_days", "last_complete_month", "last_60_days", "last_two_complete_months", "custom"] = "last_complete_month"
+    periodStart: datetime | None = None
+    periodEnd: datetime | None = None
     format: Literal["parquet", "csv"] = "parquet"
+    useFeedback: bool = False
 
 
 class RetrainingPeriod(BaseModel):

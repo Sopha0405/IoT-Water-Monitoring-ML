@@ -39,7 +39,3 @@ class MqttConsumer:
             return
 
         self._on_payload(msg.topic, payload)
-
-
-
-

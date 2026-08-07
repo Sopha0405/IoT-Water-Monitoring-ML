@@ -35,7 +35,7 @@ class InfluxWriter:
 
         self._thread = threading.Thread(target=self._loop, daemon=True)
 
-    @property
+    @propertyS
     def queue(self):
         return self._q
 
@@ -56,8 +56,8 @@ class InfluxWriter:
 
     def enqueue(self, topic: str, payload: Dict[str, Any]) -> bool:
         """
-        Encola sin bloquear. Si estÃ¡ llena, descarta el mÃ¡s viejo y reintenta.
-        Devuelve True si se encolÃ³.
+        Encola sin bloquear. Si esta llena, descarta el mas viejo y reintenta.
+        Devuelve True si se encola.
         """
         try:
             self._q.put_nowait((topic, payload))
@@ -94,7 +94,3 @@ class InfluxWriter:
                 self._q.task_done()
 
         print("[WRITER] stopped")
-
-
-
-

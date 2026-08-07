@@ -3,12 +3,14 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.core.access import has_admin_access
 from app.core.deps import get_current_user
 from app.db.postgres import get_db
 from app.modules.devices.model import Device
@@ -19,6 +21,7 @@ from app.modules.ml_analysis.api.schemas import (
     InferenceRequest,
     InferenceResponse,
     ModelStatus,
+    PromotionDecisionRequest,
     RejectCandidateRequest,
     RetrainingExportSummary,
     RetrainingFromInfluxRequest,
@@ -36,10 +39,13 @@ from app.modules.ml_analysis.inference.service import (
 from app.modules.ml_analysis.training.admin_retraining import (
     RETRAINING_ROOT,
     export_report_path,
+    job_dir,
+    load_job_state,
     load_export_summary,
     prepare_from_influx,
     recommendation_for_job,
     source_file,
+    start_training_job,
 )
 from app.modules.roles.model import Role
 from app.modules.users.model import User
@@ -58,6 +64,8 @@ def require_role(*role_names: str):
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> User:
+        if has_admin_access(current_user):
+            return current_user
         role = db.query(Role).filter(Role.id == current_user.role_id).first()
         if role is None or role.name.strip().lower() not in normalized:
             raise HTTPException(
@@ -92,13 +100,14 @@ async def list_ml_analysis(
         {
             "id": row.id,
             "alert_id": row.alert_id,
-            "device_id": row.device_id,
-            "floor": row.floor,
+            "device_id": row.device.device_id if row.device else str(row.device_id),
+            "floor": row.device.floor if row.device else None,
             "observed_value": row.observed_value,
             "model_name": row.model_name,
+            "model_version": row.model_version,
             "raw_anomaly_score": row.anomaly_score,
-            "anomaly_score": row.confidence if row.prediction == "anomaly" else 0,
-            "prediction": row.prediction,
+            "anomaly_score": row.confidence if row.prediction else 0,
+            "prediction": "anomaly" if row.prediction else "normal",
             "confidence": row.confidence,
             "processed_at": row.processed_at,
         }
@@ -221,14 +230,38 @@ async def retrain_model(
 
 @router.post("/promote", response_model=ModelStatus)
 async def promote_candidate(
+    request: PromotionDecisionRequest,
     current_user: User = Depends(require_role("supervisor", "ti", "admin")),
 ):
-    """La promocion oficial requiere test-report y se ejecuta por CLI."""
-    del current_user
-    raise HTTPException(
-        status_code=status.HTTP_410_GONE,
-        detail="Use python -m app.modules.ml_analysis.cli.promote_model con --test-report y --confirm.",
+    if not request.acknowledgedWarnings:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debe confirmar que la version anterior se conservara para rollback.",
+        )
+    try:
+        promoted = model_manager.promote_candidate()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if not promoted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe candidate.joblib para promover.")
+    clear_model_cache()
+    payload = model_manager.get_status()
+    audit_path = model_manager.archive_dir / "promotion_audit.jsonl"
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_path.open("a", encoding="utf-8").write(
+        json.dumps(
+            {
+                "action": "promote_candidate",
+                "user_id": current_user.id,
+                "reason": request.reason,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "schema": "manual_promotion_api_v1",
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
     )
+    return payload
 
 
 @router.post("/reject", response_model=ModelStatus)
@@ -296,7 +329,14 @@ async def prepare_candidate_from_influx(
     del current_user
     payload = request or RetrainingFromInfluxRequest()
     try:
-        return prepare_from_influx(payload.sensorIds, payload.periodType, payload.format)
+        return prepare_from_influx(
+            payload.sensorIds,
+            payload.periodType,
+            payload.format,
+            period_start=payload.periodStart,
+            period_end=payload.periodEnd,
+            use_feedback=payload.useFeedback,
+        )
     except Exception as exc:
         logger.exception("No se pudo preparar dataset desde InfluxDB")
         raise HTTPException(
@@ -313,6 +353,42 @@ async def list_retraining_jobs(
     return _collect_retraining_jobs()
 
 
+@admin_router.post("/jobs")
+async def create_retraining_job(
+    request: RetrainingFromInfluxRequest | None = None,
+    current_user: User = Depends(require_role("supervisor", "ti", "admin")),
+):
+    del current_user
+    payload = request or RetrainingFromInfluxRequest()
+    try:
+        return prepare_from_influx(
+            payload.sensorIds,
+            payload.periodType,
+            payload.format,
+            period_start=payload.periodStart,
+            period_end=payload.periodEnd,
+            use_feedback=payload.useFeedback,
+        )
+    except Exception as exc:
+        logger.exception("No se pudo crear job de reentrenamiento")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@admin_router.get("/jobs/{job_id}")
+async def get_retraining_job_status(
+    job_id: int,
+    current_user: User = Depends(require_role("supervisor", "ti", "admin")),
+):
+    del current_user
+    state = load_job_state(job_id)
+    if state is None:
+        try:
+            return load_export_summary(job_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return state
+
+
 def _collect_retraining_jobs() -> list[dict[str, object]]:
     if not RETRAINING_ROOT.exists():
         return []
@@ -321,7 +397,10 @@ def _collect_retraining_jobs() -> list[dict[str, object]]:
         if not path.is_dir() or not path.name.isdigit():
             continue
         try:
-            jobs.append(load_export_summary(int(path.name)))
+            job_id = int(path.name)
+            state = load_job_state(job_id)
+            summary = load_export_summary(job_id)
+            jobs.append({**summary, **(state or {})})
         except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError):
             jobs.append({"jobId": int(path.name), "status": "invalid", "error": "Resumen no disponible"})
     return jobs
@@ -389,6 +468,18 @@ async def download_retraining_report(
     return FileResponse(path, filename="export_report.json", media_type="application/json")
 
 
+@admin_router.get("/{job_id}/download-processed")
+async def download_processed_dataset(
+    job_id: int,
+    current_user: User = Depends(require_role("supervisor", "ti", "admin")),
+):
+    del current_user
+    path = job_dir(job_id) / "processed" / "windows_gold.parquet"
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe dataset procesado para el trabajo.")
+    return FileResponse(path, filename="windows_gold.parquet", media_type="application/octet-stream")
+
+
 @admin_router.post("/{job_id}/train")
 async def start_candidate_training(
     job_id: int,
@@ -404,10 +495,10 @@ async def start_candidate_training(
             status_code=status.HTTP_409_CONFLICT,
             detail={"message": "El dataset no es apto para entrenamiento.", "blockingReasons": summary["blockingReasons"]},
         )
-    raise HTTPException(
-        status_code=status.HTTP_202_ACCEPTED,
-        detail="Dataset listo. Ejecute el pipeline de preparacion, gold, split y train usando el archivo exportado; active.joblib no sera modificado.",
-    )
+    try:
+        return start_training_job(job_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @admin_router.get("/{job_id}/recommendation")

@@ -28,7 +28,7 @@ def export_feedback(output: str, report_output: str) -> dict:
                 continue
             data.append({
                 "alert_id": row.alert_id,
-                "sensor_id": row.sensor_id,
+                "sensor_id": row.device.device_id if row.device else str(row.device_id),
                 "model_version": row.model_version,
                 "feature_schema_version": row.feature_schema_version,
                 "prediction_score": row.prediction_score,
@@ -40,7 +40,7 @@ def export_feedback(output: str, report_output: str) -> dict:
                 "baseline_train_eligible": export_role == "normal_difficult",
                 "window_start": row.window_start,
                 "window_end": row.window_end,
-                "source_data_hash": row.source_data_hash,
+                "source_data_hash": f"feedback-{row.id}",
             })
     finally:
         db.close()

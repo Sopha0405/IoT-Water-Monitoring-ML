@@ -13,7 +13,7 @@ import {
   StatusBadge,
 } from '../components/dashboard/DashboardPrimitives';
 import { useLiveTelemetry } from '../hooks/useLiveTelemetry';
-import { floors } from '../lib/constants';
+import { allowedFloorsForUser, defaultFloorForUser } from '../lib/constants';
 
 const billingReference = {
   consumptionM3: 318,
@@ -48,8 +48,9 @@ function sumValues(values) {
   return values.reduce((sum, value) => sum + value, 0);
 }
 
-export function ControlPanel({ token }) {
-  const [floor, setFloor] = useState('PB');
+export function ControlPanel({ token, currentUser }) {
+  const availableFloors = useMemo(() => allowedFloorsForUser(currentUser, currentUser?.role_id === 3), [currentUser]);
+  const [floor, setFloor] = useState(() => defaultFloorForUser(currentUser));
   const {
     points,
     latestPoint,
@@ -72,7 +73,6 @@ export function ControlPanel({ token }) {
   const sewerRate = billingReference.sewerAmount / billingReference.consumptionM3;
   const totalRate = potableWaterRate + sewerRate;
   const amount = monthly * totalRate;
-  const systemState = latestValue >= 20 || peak >= 25 ? 'Revisar consumo' : 'Sistema Normal';
   const sensorSeries = useMemo(() => buildSensorSeries(points, now), [points, now]);
   const hourlyRows = useMemo(() => buildHourlyRows(points), [points]);
   const hasChartData = sensorSeries.some((item) => item.points.length);
@@ -87,16 +87,20 @@ export function ControlPanel({ token }) {
       : 'Sin datos reales';
   const connectionTone = isRealLive ? 'good' : source === 'demo' ? 'warn' : 'bad';
   const latestSensor = latestPoint?.device_id || '-';
-  const latestSource = source === 'real' ? 'InfluxDB real' : source === 'demo' ? 'Fallback demo' : 'Sin fuente';
-
   const headerActions = (
     <>
       <div>
         <span className="control-label">Piso</span>
-        <FloorSelector floors={floors} value={floor} onChange={setFloor} />
+        <FloorSelector
+          floors={availableFloors}
+          value={floor}
+          onChange={(value) => {
+            setFloor(value);
+          }}
+        />
       </div>
       <button className="secondary-action" onClick={refresh} disabled={loading}>
-        {loading ? 'Actualizando...' : 'Actualizar informacion'}
+        {loading ? 'Actualizando...' : 'Actualizar información'}
       </button>
     </>
   );
@@ -116,15 +120,14 @@ export function ControlPanel({ token }) {
           tone={connectionTone}
         />
         <InfoCard label="Sensor" value={latestSensor} />
-        <InfoCard label="Ultima lectura" value={formatAge(secondsSinceLastPoint)} />
-        <InfoCard label="Fuente" value={latestSource} />
+        <InfoCard label="Última lectura" value={formatAge(secondsSinceLastPoint)} />
       </section>
 
-      {error && <div className="form-error page-error">No fue posible completar la operacion: {error}</div>}
+      {error && <div className="form-error page-error">No fue posible completar la operación: {error}</div>}
       {source !== 'real' && (
         <div className={`status-banner ${source === 'demo' ? 'warning' : 'danger'}`}>
           {source === 'demo'
-            ? 'Mostrando datos demo porque InfluxDB no devolvio telemetria real para este filtro.'
+            ? 'Mostrando datos demo porque InfluxDB no devolvió telemetría real para este filtro.'
             : 'No se encontraron registros reales para el periodo seleccionado.'}
         </div>
       )}
@@ -133,12 +136,11 @@ export function ControlPanel({ token }) {
         <MetricCard label="Consumo actual" value={latestValue.toFixed(2)} unit="L/min" tone="blue" />
         <MetricCard label="Consumo promedio" value={average.toFixed(2)} unit="L/min" />
         <MetricCard label="Pico de consumo" value={peak.toFixed(2)} unit="L/min" tone={peak >= 25 ? 'critical' : 'blue'} />
-        <MetricCard label="Estado del sistema" value={systemState} tone={systemState === 'Sistema Normal' ? 'ok' : 'warning'} />
       </DashboardGrid>
 
       <SectionCard
         title="Caudal por sensor"
-        description={`Ventana movil de 5 minutos - ultima lectura ${formatAge(secondsSinceLastPoint)}`}
+        description={`Ventana móvil de 5 minutos - última lectura ${formatAge(secondsSinceLastPoint)}`}
         className="chart-panel"
         meta={(
           <div className={`live-indicator ${isRealLive ? 'online' : 'stale'}`}>
@@ -170,7 +172,6 @@ export function ControlPanel({ token }) {
       <DashboardGrid variant="secondary">
         <MetricCard label="Consumo mensual estimado" value={formatDecimal(monthly, 1)} unit="m³" />
         <MetricCard label="Importe estimado" value={formatCurrency(amount)} tone="money" />
-        <MetricCard label="Costo referencial" value={formatCurrency(totalRate)} unit="por m³" />
         <MetricCard label="Lecturas cargadas" value={flowValues.length} />
         <MetricCard label="Sensores visibles" value={sensorSeries.length} />
       </DashboardGrid>

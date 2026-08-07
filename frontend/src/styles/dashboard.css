@@ -385,6 +385,13 @@ p {
   background: var(--surface);
 }
 
+.login-card .login-link-button {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--brand);
+}
+
 .form-error {
   border: 1px solid var(--color-danger);
   border-radius: var(--radius-md);
@@ -555,6 +562,7 @@ p {
   padding: 0 var(--space-6);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 
 .mobile-menu-button {
@@ -849,6 +857,31 @@ p {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.management-tabs {
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-5);
+  padding: 4px;
+  background: var(--color-surface-secondary);
+}
+
+.management-tabs button {
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.management-tabs button.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
 .control-label {
   display: block;
   margin-bottom: 10px;
@@ -886,7 +919,7 @@ p {
 
 .quick-status-strip {
   display: grid;
-  grid-template-columns: minmax(150px, 1.2fr) repeat(3, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-4);
   margin: 0 0 var(--space-6);
 }
@@ -897,7 +930,7 @@ p {
   border-radius: var(--radius-md);
   padding: 14px 16px;
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
@@ -988,7 +1021,7 @@ p {
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   padding: var(--space-5);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.07);
 }
 
 .metric-label {
@@ -1733,6 +1766,140 @@ td span {
 
 .admin-actions button {
   width: auto;
+}
+
+.training-process-panel {
+  margin-top: 0;
+  margin-bottom: var(--space-6);
+}
+
+.training-process-panel .panel-heading {
+  padding-bottom: 14px;
+}
+
+.training-progress-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 16px;
+  margin: 0 0 var(--space-6);
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.training-progress-copy strong,
+.training-progress-copy span {
+  display: block;
+}
+
+.training-progress-copy strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.training-progress-copy span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.training-progress-value {
+  align-self: center;
+  color: var(--color-info);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.training-progress-track {
+  position: relative;
+  grid-column: 1 / -1;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+
+.training-progress-track span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-info), #2e9d72);
+  transition: width 320ms ease;
+}
+
+.training-stepper {
+  display: grid;
+  gap: 10px;
+  padding: 18px 20px 22px;
+}
+
+.training-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--color-surface);
+}
+
+.training-step.running {
+  border-color: var(--color-info);
+  background: var(--color-info-bg);
+  box-shadow: 0 0 0 3px rgba(33, 97, 140, 0.08);
+  animation: training-step-pulse 1.6s ease-in-out infinite;
+}
+
+.training-step.completed {
+  border-color: rgba(46, 157, 114, 0.22);
+}
+
+.training-step.warning {
+  border-color: rgba(217, 144, 26, 0.28);
+}
+
+.training-step.failed {
+  border-color: rgba(214, 69, 69, 0.32);
+}
+
+.training-step strong,
+.training-step span,
+.training-step small {
+  display: block;
+}
+
+.training-step strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.training-step span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.training-step small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@keyframes training-step-pulse {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-1px);
+  }
 }
 
 .table-panel.sensor-table th:nth-child(1) {

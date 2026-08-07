@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ActionPopcard } from '../components/ActionPopcard';
+import { FloorManagement } from '../components/FloorManagement';
 import { MetricCard } from '../components/MetricCard';
 import { Pill } from '../components/Pill';
 import { apiRequest } from '../lib/api';
-import { floors, normalizeFloor, roleNames } from '../lib/constants';
+import { floors, hasAdminAccess, normalizeFloor, roleNames } from '../lib/constants';
 
 export function UserManagement({ token, currentUser }) {
+  const canManageFloors = hasAdminAccess(currentUser);
+  const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState('');
   const [floor, setFloor] = useState('Todos');
@@ -22,12 +25,13 @@ export function UserManagement({ token, currentUser }) {
     password: '',
     phone: '',
     floor: 'PB',
+    limit_to_floor: false,
     role_id: 1,
     is_active: true,
   });
 
   function resetForm() {
-    setForm({ name: '', email: '', password: '', phone: '', floor: 'PB', role_id: 1, is_active: true });
+    setForm({ name: '', email: '', password: '', phone: '', floor: 'PB', limit_to_floor: false, role_id: 1, is_active: true });
     setEditingUser(null);
   }
 
@@ -61,6 +65,7 @@ export function UserManagement({ token, currentUser }) {
       password: '',
       phone: user.phone || '',
       floor: normalizeFloor(user.floor) || 'PB',
+      limit_to_floor: user.limit_to_floor || false,
       role_id: user.role_id || 1,
       is_active: user.is_active ?? true,
     });
@@ -77,6 +82,7 @@ export function UserManagement({ token, currentUser }) {
         email: form.email,
         phone: form.phone || null,
         floor: form.floor === 'Todos' ? null : form.floor,
+        limit_to_floor: form.limit_to_floor,
         role_id: Number(form.role_id),
         is_active: form.is_active,
       };
@@ -147,6 +153,17 @@ export function UserManagement({ token, currentUser }) {
 
   return (
     <>
+      {canManageFloors && (
+        <div className="management-tabs">
+          <button className={activeTab === 'users' ? 'active' : ''} onClick={() => setActiveTab('users')}>Usuarios</button>
+          <button className={activeTab === 'floors' ? 'active' : ''} onClick={() => setActiveTab('floors')}>Gestion de pisos</button>
+        </div>
+      )}
+
+      {activeTab === 'floors' && <FloorManagement token={token} />}
+
+      {activeTab === 'users' && (
+      <>
       <header className="page-header">
         <div>
           <h1>Usuarios</h1>
@@ -197,6 +214,14 @@ export function UserManagement({ token, currentUser }) {
           <label>Password<input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required={!editingUser} minLength="8" placeholder={editingUser ? 'Dejar igual' : ''} /></label>
           <label>Telefono<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
           <label>Piso<select value={form.floor} onChange={(event) => setForm({ ...form, floor: event.target.value })}>{floors.filter((item) => item !== 'Todos').map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label className="inline-check">
+            <input
+              type="checkbox"
+              checked={form.limit_to_floor}
+              onChange={(event) => setForm({ ...form, limit_to_floor: event.target.checked })}
+            />
+            Limitar al piso asignado
+          </label>
           <label>Rol<select value={form.role_id} onChange={(event) => setForm({ ...form, role_id: event.target.value })}><option value="1">Supervisor</option><option value="2">Tecnico</option><option value="3">Administrador</option></select></label>
           <label>Estado<select value={form.is_active ? 'true' : 'false'} onChange={(event) => setForm({ ...form, is_active: event.target.value === 'true' })}><option value="true">Activo</option><option value="false">Inactivo</option></select></label>
         </div>
@@ -207,7 +232,7 @@ export function UserManagement({ token, currentUser }) {
 
       <section className="metrics-grid">
         <MetricCard icon="group" label="Total de usuarios" value={users.length} />
-        <MetricCard icon="admin_panel_settings" label="Administradores" value={users.filter((user) => user.role_id === 3).length} tone="blue" />
+        <MetricCard icon="admin_panel_settings" label="Acceso administrativo" value={users.filter((user) => hasAdminAccess(user)).length} tone="blue" />
         <MetricCard icon="verified_user" label="Activos" value={users.filter((user) => user.is_active).length} tone="ok" />
         <MetricCard icon="filter_alt" label="Resultados filtrados" value={filtered.length} />
       </section>
@@ -229,8 +254,8 @@ export function UserManagement({ token, currentUser }) {
             {filtered.map((user) => (
               <tr key={user.id}>
                 <td><strong>{user.name}</strong><span>{user.email}</span></td>
-                <td>{user.floor || 'Todos'}</td>
-                <td><Pill tone={user.role_id === 3 ? 'info' : 'neutral'}>{roleNames[user.role_id] || `Rol ${user.role_id}`}</Pill></td>
+                <td>{user.limit_to_floor ? user.floor || '-' : 'Todos'}</td>
+                <td><Pill tone={hasAdminAccess(user) ? 'info' : 'neutral'}>{roleNames[user.role_id] || `Rol ${user.role_id}`}</Pill></td>
                 <td><Pill tone={user.is_active ? 'success' : 'warning'}>{user.is_active ? 'Activo' : 'Inactivo'}</Pill></td>
                 <td>{user.phone || '-'}</td>
                 <td className="actions">
@@ -260,6 +285,8 @@ export function UserManagement({ token, currentUser }) {
         >
           <p className="popcard-note">Esta accion quitara el acceso del usuario al sistema.</p>
         </ActionPopcard>
+      )}
+      </>
       )}
     </>
   );

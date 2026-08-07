@@ -1,13 +1,14 @@
 import { useState } from 'react';
 
 import { Logo } from './Logo';
+import { canAccessSection } from '../lib/constants';
 
 const menuItems = [
   { id: 'dashboard', label: 'Panel general', icon: 'dashboard' },
-  { id: 'sensors', label: 'Dispositivos', icon: 'sensors' },
   { id: 'alerts', label: 'Alertas', icon: 'notifications' },
-  { id: 'ml-model', label: 'Gestion del modelo', icon: 'model_training', adminOnly: true },
+  { id: 'sensors', label: 'Dispositivos', icon: 'sensors' },
   { id: 'users', label: 'Usuarios', icon: 'group' },
+  { id: 'ml-model', label: 'Gestion del modelo', icon: 'model_training' },
   { id: 'settings', label: 'Configuracion', icon: 'settings' },
 ];
 
@@ -25,11 +26,10 @@ function initialsFor(user) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-export function DashboardLayout({ active, setActive, role, user, onLogout, children, theme, onToggleTheme }) {
+export function DashboardLayout({ active, setActive, role, user, token, onLogout, children, theme, onToggleTheme }) {
+  void token;
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const visibleItems = menuItems.filter((item) => (
-    !(role === 'tecnico' && item.id === 'users') && (!item.adminOnly || role === 'admin')
-  ));
+  const visibleItems = menuItems.filter((item) => canAccessSection(role, item.id));
   const currentItem = visibleItems.find((item) => item.id === active);
 
   function selectSection(id) {

@@ -43,7 +43,25 @@ def evaluate_test(model_path: str | Path, test_path: str | Path, predictions_pat
     predictions["anomaly_score"] = -scores
     predictions["anomaly_severity"] = _normalize_severity(predictions.get("anomaly_severity"))
     write_dataframe(predictions, predictions_path)
-    base = classification_metrics(y_true, predicted)
+    supervised_available = len(np.unique(y_true)) >= 2
+    base = classification_metrics(y_true, predicted) if supervised_available else {
+        "precision": None,
+        "recall": None,
+        "f1": None,
+        "f0_5": None,
+        "fpr": float(predicted.mean()) if len(predicted) else None,
+        "specificity": float(1.0 - predicted.mean()) if len(predicted) else None,
+        "balanced_accuracy": None,
+        "false_positives": int(predicted.sum()) if len(predicted) else 0,
+        "false_negatives": None,
+        "confusion_matrix": None,
+        "normal_acceptance_rate": float(1.0 - predicted.mean()) if len(predicted) else None,
+        "predicted_alert_rate": float(predicted.mean()) if len(predicted) else None,
+        "accepted_windows": int(len(predicted) - predicted.sum()) if len(predicted) else 0,
+        "predicted_anomaly_windows": int(predicted.sum()) if len(predicted) else 0,
+        "supervised_metrics_available": False,
+        "unavailable_reason": "No existe un conjunto etiquetado suficiente.",
+    }
     test_metrics = {
         **base,
         "pr_auc": _safe_auc(average_precision_score, y_true, -scores),
@@ -77,6 +95,8 @@ def evaluate_test(model_path: str | Path, test_path: str | Path, predictions_pat
         "temporal_confirmation": _temporal_confirmation(predictions),
         "incidents": incident_metrics(predictions, merge_by_event_id=True),
         "test_used_for_selection": False,
+        "supervised_metrics_available": supervised_available,
+        "unavailable_reason": None if supervised_available else "No existe un conjunto etiquetado suficiente.",
     }
     write_json(report_path, report)
     return report

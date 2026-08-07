@@ -6,7 +6,9 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     phone: str | None = None
+    floor_id: int | None = None
     floor: str | None = None
+    limit_to_floor: bool = False
     role_id: int
     is_active: bool
 
@@ -19,7 +21,9 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     phone: str | None = None
+    floor_id: int | None = None
     floor: str | None = None
+    limit_to_floor: bool = False
     role_id: int
     is_active: bool = True
 
@@ -28,7 +32,9 @@ class UserUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     email: EmailStr | None = None
     phone: str | None = None
+    floor_id: int | None = None
     floor: str | None = None
+    limit_to_floor: bool | None = None
     role_id: int | None = None
     is_active: bool | None = None
 

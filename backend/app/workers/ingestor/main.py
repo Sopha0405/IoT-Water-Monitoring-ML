@@ -10,6 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db.postgres import SessionLocal
 from app.modules.alerts.model import Alert
+from app.modules.devices.registry import ensure_device_registered
 from app.modules.ml_analysis.alerts.policy import AlertPolicy
 from app.modules.ml_analysis.alerts.policy import microleak_rule
 from app.modules.ml_analysis.features.constants import FEATURE_NAMES, FEATURE_SCHEMA_VERSION
@@ -343,14 +344,15 @@ def _persist_streaming_prediction(
         model_label = "IsolationForest"
         if model_status.active_version:
             model_label = f"IsolationForest:{model_status.active_version[:16]}"
+        device = ensure_device_registered(db, sensor_id, floor)
         analysis = MLAnalysis(
             alert_id=None,
-            device_id=sensor_id,
-            floor=floor or None,
+            device_id=device.id,
             observed_value=float(features["mu_q"]),
             model_name=model_label,
+            model_version=model_status.active_version,
             anomaly_score=float(prediction["score"]),
-            prediction=str(prediction["prediction"]),
+            prediction=str(prediction["prediction"]) == "anomaly",
             confidence=float(prediction["confidence"]),
             processed_at=_naive_utc(processed_at),
         )
@@ -360,8 +362,8 @@ def _persist_streaming_prediction(
             alert = _find_recent_streaming_alert(db, sensor_id, str(prediction["anomaly_type"]))
             if alert is None:
                 alert = Alert(
-                    device_id=sensor_id,
-                    floor=floor or None,
+                    device_id=device.id,
+                    ml_analysis_id=analysis.id,
                     anomaly_type=str(prediction["anomaly_type"]),
                     severity=str(prediction["severity"]),
                     risk_percentage=float(prediction["confidence"]),
@@ -390,10 +392,11 @@ def _find_recent_streaming_alert(db, sensor_id: str, anomaly_type: str) -> Alert
 
     cooldown_minutes = int(os.getenv("ML_ALERT_COOLDOWN_MINUTES", "15"))
     cutoff = datetime.utcnow() - timedelta(minutes=cooldown_minutes)
+    device = ensure_device_registered(db, sensor_id)
     return (
         db.query(Alert)
         .filter(
-            Alert.device_id == sensor_id,
+            Alert.device_id == device.id,
             Alert.anomaly_type == anomaly_type,
             Alert.status == "pendiente",
             Alert.detected_at >= cutoff,

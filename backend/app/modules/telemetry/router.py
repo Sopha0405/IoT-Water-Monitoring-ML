@@ -1,5 +1,6 @@
 ﻿from fastapi import APIRouter, Depends, Query
 
+from app.core.access import resolve_floor_scope
 from app.core.deps import get_current_user
 from app.modules.telemetry.schemas import TelemetryPoint
 from app.modules.telemetry.service import get_latest_telemetry, get_telemetry_series
@@ -17,7 +18,8 @@ def latest_telemetry(
     limit: int = Query(default=50, ge=1, le=2000),
     current_user: User = Depends(get_current_user),
 ):
-    return get_latest_telemetry(device_id=device_id, site=site, floor=floor, field=field, limit=limit)
+    scoped_floor = resolve_floor_scope(current_user, floor)
+    return get_latest_telemetry(device_id=device_id, site=site, floor=scoped_floor, field=field, limit=limit)
 
 
 @router.get("/series", response_model=list[TelemetryPoint])
@@ -28,7 +30,9 @@ def telemetry_series(
     limit: int = Query(default=500, ge=1, le=2000),
     current_user: User = Depends(get_current_user),
 ):
-    return get_telemetry_series(device_id=device_id, field=field, hours=hours, limit=limit)
+    del current_user
+    points = get_telemetry_series(device_id=device_id, field=field, hours=hours, limit=limit)
+    return points
 
 
 

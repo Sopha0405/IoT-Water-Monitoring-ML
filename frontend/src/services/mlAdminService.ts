@@ -68,10 +68,6 @@ export function getModelComparison(token: string) {
   return getModelAdminStatus(token);
 }
 
-export function getModelHistory(token: string) {
-  return apiRequest('/api/v1/admin/ml/retraining/models/history', { token }).catch(() => []);
-}
-
 export function getRetrainingJobs(token: string) {
   return apiRequest('/api/v1/admin/ml/retraining/jobs', { token }).catch(() => []);
 }
